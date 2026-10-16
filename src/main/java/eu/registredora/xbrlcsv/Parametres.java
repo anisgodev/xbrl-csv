@@ -17,6 +17,8 @@ public record Parametres(Map<String, String> valeurs) {
     public static final String ENTITY_ID = "entityID";
     public static final String REF_PERIOD = "refPeriod";
     public static final String BASE_CURRENCY = "baseCurrency";
+    public static final String DECIMALS_MONETARY = "decimalsMonetary";
+    public static final String DECIMALS_INTEGER = "decimalsInteger";
 
     public Parametres {
         valeurs = Collections.unmodifiableMap(new LinkedHashMap<>(valeurs));

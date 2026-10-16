@@ -14,7 +14,7 @@ public final class ValidateurStructurel {
 
     private static final Pattern NOM_PAQUET = Pattern.compile("[A-Za-z0-9._-]+");
     private static final Pattern CODE_TABLE = Pattern.compile("[A-Z]_[0-9]{2}\\.[0-9]{2}");
-    private static final Pattern DEVISE = Pattern.compile("[A-Z]{3}");
+    private static final Pattern DEVISE = Pattern.compile("(iso4217:)?[A-Z]{3}");
     private static final Pattern DATE = Pattern.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}");
 
     public List<MessageDeValidation> valider(PaquetDeRapport paquet) {

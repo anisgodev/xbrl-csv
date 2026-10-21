@@ -2,6 +2,9 @@ package eu.registredora.xbrlcsv;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -11,6 +14,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ValidateurStructurelTest {
 
     private final ValidateurStructurel validateur = new ValidateurStructurel();
+
+    @Test
+    void la_liste_des_regles_reprend_tous_les_codes_emis() throws IOException {
+        String source = Files.readString(Path.of("src/main/java/eu/registredora/xbrlcsv/ValidateurStructurel.java"));
+        List<String> emis = java.util.regex.Pattern.compile("(?:bloquant|alerte)\\(\"(XC-[A-Z-]+)\"").matcher(source)
+                .results().map(m -> m.group(1)).distinct().toList();
+        assertThat(emis).isNotEmpty();
+        assertThat(ValidateurStructurel.REGLES).containsExactlyInAnyOrderElementsOf(emis);
+    }
 
     @Test
     void un_paquet_correct_ne_produit_aucun_message() {

@@ -12,6 +12,12 @@ import java.util.regex.Pattern;
  */
 public final class ValidateurStructurel {
 
+    /** Codes des règles appliquées, pour annoncer combien de règles un contrôle a vérifiées. */
+    public static final List<String> REGLES = List.of(
+            "XC-NOM-PAQUET", "XC-POINT-ENTREE", "XC-PARAM-ENTITE", "XC-PARAM-PERIODE", "XC-PARAM-DEVISE",
+            "XC-INDICATEUR-DOUBLON", "XC-TABLE-DOUBLON", "XC-TABLE-NON-DECLAREE", "XC-TABLE-ABSENTE", "XC-TABLE-CODE",
+            "XC-TABLE-COLONNES", "XC-COLONNE-VIDE", "XC-COLONNE-DOUBLON", "XC-LIGNE-LARGEUR", "XC-LIGNE-VIDE");
+
     private static final Pattern NOM_PAQUET = Pattern.compile("[A-Za-z0-9._-]+");
     private static final Pattern CODE_TABLE = Pattern.compile("[A-Z]_[0-9]{2}\\.[0-9]{2}");
     private static final Pattern DEVISE = Pattern.compile("(iso4217:)?[A-Z]{3}");

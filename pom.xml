@@ -8,7 +8,16 @@
     <artifactId>xbrl-csv</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <name>xBRL-CSV</name>
-    <description>Bibliothèque Java autonome pour écrire, lire et contrôler des paquets de rapport xBRL-CSV (registre d'information DORA).</description>
+    <description>Standalone Java library to write, read and check xBRL-CSV report packages (DORA register of information).</description>
+    <url>https://github.com/anisgodev/xbrl-csv</url>
+
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
 
     <properties>
         <java.version>21</java.version>

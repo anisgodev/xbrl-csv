@@ -3,91 +3,91 @@ package eu.registredora.xbrlcsv;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Écriture et lecture CSV selon la RFC 4180 (séparateur virgule, guillemets doubles, fins de ligne CRLF). */
+/** CSV writing and reading per RFC 4180 (comma separator, double quotes, CRLF line endings). */
 final class Csv {
 
-    static final String FIN_DE_LIGNE = "\r\n";
+    static final String LINE_ENDING = "\r\n";
 
     private Csv() {
     }
 
-    static String ecrire(List<String> entetes, List<List<String>> lignes) {
+    static String write(List<String> headers, List<List<String>> rows) {
         StringBuilder sb = new StringBuilder();
-        ecrireLigne(sb, entetes);
-        for (List<String> ligne : lignes) {
-            ecrireLigne(sb, ligne);
+        writeRow(sb, headers);
+        for (List<String> row : rows) {
+            writeRow(sb, row);
         }
         return sb.toString();
     }
 
-    private static void ecrireLigne(StringBuilder sb, List<String> valeurs) {
-        for (int i = 0; i < valeurs.size(); i++) {
+    private static void writeRow(StringBuilder sb, List<String> values) {
+        for (int i = 0; i < values.size(); i++) {
             if (i > 0) {
                 sb.append(',');
             }
-            sb.append(echapper(valeurs.get(i)));
+            sb.append(escape(values.get(i)));
         }
-        sb.append(FIN_DE_LIGNE);
+        sb.append(LINE_ENDING);
     }
 
-    static String echapper(String valeur) {
-        if (valeur == null) {
+    static String escape(String value) {
+        if (value == null) {
             return "";
         }
-        boolean aProteger = valeur.indexOf(',') >= 0 || valeur.indexOf('"') >= 0
-                || valeur.indexOf('\n') >= 0 || valeur.indexOf('\r') >= 0;
-        return aProteger ? '"' + valeur.replace("\"", "\"\"") + '"' : valeur;
+        boolean needsQuoting = value.indexOf(',') >= 0 || value.indexOf('"') >= 0
+                || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
+        return needsQuoting ? '"' + value.replace("\"", "\"\"") + '"' : value;
     }
 
-    /** Lit un contenu CSV complet ; la première ligne est l'en-tête. Les lignes vides finales sont ignorées. */
-    static List<List<String>> lire(String contenu) {
-        List<List<String>> lignes = new ArrayList<>();
-        List<String> ligne = new ArrayList<>();
-        StringBuilder champ = new StringBuilder();
-        boolean entreGuillemets = false;
+    /** Reads a complete CSV content; the first row is the header. Trailing empty lines are ignored. */
+    static List<List<String>> read(String content) {
+        List<List<String>> rows = new ArrayList<>();
+        List<String> row = new ArrayList<>();
+        StringBuilder field = new StringBuilder();
+        boolean inQuotes = false;
         int i = 0;
-        if (contenu.startsWith("﻿")) {
+        if (content.startsWith("﻿")) {
             i = 1;
         }
-        while (i < contenu.length()) {
-            char c = contenu.charAt(i);
-            if (entreGuillemets) {
+        while (i < content.length()) {
+            char c = content.charAt(i);
+            if (inQuotes) {
                 if (c == '"') {
-                    if (i + 1 < contenu.length() && contenu.charAt(i + 1) == '"') {
-                        champ.append('"');
+                    if (i + 1 < content.length() && content.charAt(i + 1) == '"') {
+                        field.append('"');
                         i++;
                     } else {
-                        entreGuillemets = false;
+                        inQuotes = false;
                     }
                 } else {
-                    champ.append(c);
+                    field.append(c);
                 }
             } else if (c == '"') {
-                entreGuillemets = true;
+                inQuotes = true;
             } else if (c == ',') {
-                ligne.add(champ.toString());
-                champ.setLength(0);
+                row.add(field.toString());
+                field.setLength(0);
             } else if (c == '\r' || c == '\n') {
-                ligne.add(champ.toString());
-                champ.setLength(0);
-                lignes.add(ligne);
-                ligne = new ArrayList<>();
-                if (c == '\r' && i + 1 < contenu.length() && contenu.charAt(i + 1) == '\n') {
+                row.add(field.toString());
+                field.setLength(0);
+                rows.add(row);
+                row = new ArrayList<>();
+                if (c == '\r' && i + 1 < content.length() && content.charAt(i + 1) == '\n') {
                     i++;
                 }
             } else {
-                champ.append(c);
+                field.append(c);
             }
             i++;
         }
-        if (entreGuillemets) {
-            throw new IllegalArgumentException("CSV invalide : guillemet non fermé");
+        if (inQuotes) {
+            throw new IllegalArgumentException("Invalid CSV: unclosed quote");
         }
-        if (champ.length() > 0 || !ligne.isEmpty()) {
-            ligne.add(champ.toString());
-            lignes.add(ligne);
+        if (field.length() > 0 || !row.isEmpty()) {
+            row.add(field.toString());
+            rows.add(row);
         }
-        lignes.removeIf(l -> l.size() == 1 && l.get(0).isEmpty());
-        return lignes;
+        rows.removeIf(r -> r.size() == 1 && r.get(0).isEmpty());
+        return rows;
     }
 }

@@ -1,21 +1,21 @@
 # xBRL-CSV
 
-Bibliothèque Java autonome (sans Spring) pour écrire, lire et contrôler des paquets de rapport xBRL-CSV, en
-particulier le registre d'information DORA déposé auprès des autorités (taxonomie DORA de l'EBA).
+Standalone Java library (no Spring) to write, read and check xBRL-CSV report packages, in particular the DORA
+register of information filed with the authorities (EBA DORA taxonomy).
 
-Seule dépendance : Jackson. Java 21 ou plus.
+Only dependency: Jackson. Java 21 or later.
 
-| Besoin | Classe |
+| Need | Class |
 |---|---|
-| Décrire un paquet : tableaux, paramètres, indicateurs de dépôt | `PaquetDeRapport`, `Table`, `Parametres`, `IndicateurDeDepot` |
-| Produire le `.zip` à déposer, octets identiques à chaque génération | `XbrlCsvWriter` |
-| Relire un `.zip` existant, archives malveillantes refusées | `XbrlCsvReader` |
-| Contrôler la structure avant dépôt | `ValidateurStructurel`, `MessageDeValidation` |
-| Valider un LEI (ISO 17442, clé ISO 7064 MOD 97-10) | `Lei` |
+| Describe a package: tables, parameters, filing indicators | `ReportPackage`, `Table`, `Parameters`, `FilingIndicator` |
+| Produce the `.zip` to file, byte-identical on every run | `XbrlCsvWriter` |
+| Read back an existing `.zip`, malicious archives rejected | `XbrlCsvReader` |
+| Check the structure before filing | `StructuralValidator`, `ValidationMessage` |
+| Validate a LEI (ISO 17442, ISO 7064 MOD 97-10 check digits) | `Lei` |
 
-Les contrôles de la taxonomie elle-même (règles EBA) ne sont pas ici : la plateforme les confie à Arelle.
+The taxonomy's own checks (EBA rules) are not here: the platform delegates them to Arelle.
 
-## Démarrage rapide
+## Quick start
 
 ```java
 import eu.registredora.xbrlcsv.*;
@@ -24,21 +24,20 @@ import java.time.LocalDate;
 import java.util.List;
 
 Table b0101 = Table.builder("B_01.01", "c0010", "c0020", "c0030")
-        .ligne("506700GE1G29325QX363", "Assurance Exemple SA", "BE")
+        .row("506700GE1G29325QX363", "Example Insurance SA", "BE")
         .build();
-PaquetDeRapport paquet = PaquetDeRapport.avecIndicateursDeduits(
+ReportPackage reportPackage = ReportPackage.withDerivedFilingIndicators(
         "506700GE1G29325QX363_2026-12-31",
         "http://www.eba.europa.eu/eu/fr/xbrl/crr/fws/dora/4.0/mod/dora.json",
-        Parametres.registre("rs:506700GE1G29325QX363.CON", LocalDate.of(2026, 12, 31), "EUR"),
+        Parameters.registerOfInformation("rs:506700GE1G29325QX363.CON", LocalDate.of(2026, 12, 31), "EUR"),
         List.of(b0101));
 
-List<MessageDeValidation> anomalies = new ValidateurStructurel().valider(paquet);
-byte[] zip = new XbrlCsvWriter().ecrire(paquet);
-PaquetDeRapport relu = new XbrlCsvReader().lire(zip);
+List<ValidationMessage> issues = new StructuralValidator().validate(reportPackage);
+byte[] zip = new XbrlCsvWriter().write(reportPackage);
+ReportPackage readBack = new XbrlCsvReader().read(zip);
 ```
 
-Pour l'utiliser dans un autre projet, installez-la dans le dépôt Maven local (voir [Construire](#construire)) puis
-déclarez :
+To use it in another project, install it in the local Maven repository (see [Build](#build)) and declare:
 
 ```xml
 <dependency>
@@ -48,191 +47,195 @@ déclarez :
 </dependency>
 ```
 
-## Fonctionnalités
+## Features
 
-### Modèle d'un paquet
+### Package model
 
-Toutes les classes du modèle sont des `record` immuables : les listes et les tables de valeurs passées en argument
-sont copiées.
+All model classes are immutable `record`s: lists and value maps passed as arguments are copied.
 
-**`Table`** : un tableau du rapport, identifié par son code (`B_01.01`), avec ses codes de colonnes et ses lignes.
-Une valeur `null` devient une chaîne vide.
+**`Table`**: a report table, identified by its code (`B_01.01`), with its column codes and its rows. A `null` value
+becomes an empty string.
 
 ```java
 Table b0501 = Table.builder("B_05.01", List.of("c0010", "c0020", "c0050"))
-        .ligne("5493001KJTIIGC8Y1R12", "LEI", "Nuage, \"Cloud\" SA")
-        .ligne(List.of("529900T8BM49AURSDO55", "LEI", "Autre prestataire"))
+        .row("5493001KJTIIGC8Y1R12", "LEI", "Cloud, \"Nimbus\" SA")
+        .row(List.of("529900T8BM49AURSDO55", "LEI", "Other provider"))
         .build();
 
-b0501.nomFichier();                       // "b_05.01.csv"
-b0501.indexColonne("c0050");              // 2 (-1 si absente)
-Table.codeDepuisFichier("b_05.01.csv");   // "B_05.01"
+b0501.fileName();                        // "b_05.01.csv"
+b0501.columnIndex("c0050");              // 2 (-1 if absent)
+Table.codeFromFileName("b_05.01.csv");   // "B_05.01"
 ```
 
-**`Parametres`** : le contenu de `parameters.csv`, dans l'ordre d'insertion. `registre(...)` remplit les trois
-paramètres minimaux d'un registre d'information (`entityID`, `refPeriod` au format `AAAA-MM-JJ`, `baseCurrency`) ;
-`avec(...)` renvoie une copie enrichie. Les noms usuels sont des constantes (`ENTITY_ID`, `REF_PERIOD`,
-`BASE_CURRENCY`, `DECIMALS_MONETARY`, `DECIMALS_INTEGER`). Les valeurs sont transmises telles quelles : leur format
-exact relève des règles de dépôt de l'EBA pour la version de taxonomie utilisée.
+**`Parameters`**: the content of `parameters.csv`, in insertion order. `registerOfInformation(...)` fills the three
+minimal parameters of a register of information (`entityID`, `refPeriod` in `YYYY-MM-DD` format, `baseCurrency`);
+`with(...)` returns an enriched copy. Common names are constants (`ENTITY_ID`, `REF_PERIOD`, `BASE_CURRENCY`,
+`DECIMALS_MONETARY`, `DECIMALS_INTEGER`). Values are passed through unchanged: their exact format is governed by the
+EBA filing rules for the taxonomy version in use.
 
 ```java
-Parametres parametres = Parametres.registre("rs:506700GE1G29325QX363.CON", LocalDate.of(2026, 12, 31), "EUR")
-        .avec(Parametres.DECIMALS_MONETARY, "-3");
-parametres.valeur(Parametres.REF_PERIOD);   // "2026-12-31"
+Parameters parameters = Parameters.registerOfInformation("rs:506700GE1G29325QX363.CON", LocalDate.of(2026, 12, 31), "EUR")
+        .with(Parameters.DECIMALS_MONETARY, "-3");
+parameters.value(Parameters.REF_PERIOD);   // "2026-12-31"
 ```
 
-**`IndicateurDeDepot`** : une ligne de `FilingIndicators.csv`, un code de modèle et s'il est déclaré.
+**`FilingIndicator`**: a row of `FilingIndicators.csv`, a template code and whether it is reported.
 
-**`PaquetDeRapport`** : le paquet complet, avec son nom (dossier racine de l'archive), l'URL du point d'entrée de la
-taxonomie, les paramètres, les indicateurs et les tableaux. Deux façons de le construire :
+**`ReportPackage`**: the complete package, with its name (root folder of the archive), the URL of the taxonomy entry
+point, the parameters, the filing indicators and the tables. Two ways to build it:
 
 ```java
-// Indicateurs déduits : chaque tableau fourni est déclaré (reported = true)
-PaquetDeRapport paquet = PaquetDeRapport.avecIndicateursDeduits(nom, pointEntree, parametres, List.of(b0101, b0501));
+// Derived indicators: every table supplied is reported (reported = true)
+ReportPackage reportPackage = ReportPackage.withDerivedFilingIndicators(name, entryPoint, parameters, List.of(b0101, b0501));
 
-// Indicateurs explicites, par exemple pour déclarer un modèle non rempli
-PaquetDeRapport explicite = new PaquetDeRapport(nom, pointEntree, parametres,
-        List.of(new IndicateurDeDepot("B_01.01", true), new IndicateurDeDepot("B_02.01", false)),
+// Explicit indicators, for example to declare a template that is not filled in
+ReportPackage explicit = new ReportPackage(name, entryPoint, parameters,
+        List.of(new FilingIndicator("B_01.01", true), new FilingIndicator("B_02.01", false)),
         List.of(b0101));
 
-paquet.table("B_05.01");   // Optional<Table>
+reportPackage.table("B_05.01");   // Optional<Table>
 ```
 
-### Écriture du paquet : `XbrlCsvWriter`
+### Writing a package: `XbrlCsvWriter`
 
-`ecrire(paquet)` renvoie les octets du `.zip` ; `ecrire(paquet, sortie)` écrit dans un `OutputStream`. L'archive
-suit la spécification xBRL Report Package 2023 et xBRL-CSV :
+`write(reportPackage)` returns the bytes of the `.zip`; `write(reportPackage, out)` writes to an `OutputStream`. The
+archive follows the xBRL Report Package 2023 and xBRL-CSV specifications:
 
 ```
-{nom}/META-INF/reportPackage.json      documentType https://xbrl.org/report-package/2023
-{nom}/reports/report.json              documentType https://xbrl.org/2021/xbrl-csv, extends [point d'entrée]
-{nom}/reports/parameters.csv           name,value
-{nom}/reports/FilingIndicators.csv     templateID,reported
-{nom}/reports/b_01.01.csv ...          un fichier par tableau, nom en minuscules
+{name}/META-INF/reportPackage.json      documentType https://xbrl.org/report-package/2023
+{name}/reports/report.json              documentType https://xbrl.org/2021/xbrl-csv, extends [entry point]
+{name}/reports/parameters.csv           name,value
+{name}/reports/FilingIndicators.csv     templateID,reported
+{name}/reports/b_01.01.csv ...          one file per table, lower-case name
 ```
 
-- CSV conformes à la RFC 4180 : séparateur virgule, fins de ligne CRLF, guillemets doubles autour des valeurs qui
-  contiennent une virgule, un guillemet ou un retour à la ligne (`Nuage, "Cloud" SA` devient
-  `"Nuage, ""Cloud"" SA"`).
-- Fichiers en UTF-8 sans BOM.
-- Sortie déterministe : ordre des entrées et dates fixes, donc un même paquet produit toujours les mêmes octets et
-  la même empreinte, ce qui permet de comparer deux générations ou de prouver ce qui a été déposé.
+- RFC 4180 CSV: comma separator, CRLF line endings, double quotes around values containing a comma, a quote or a
+  line break (`Cloud, "Nimbus" SA` becomes `"Cloud, ""Nimbus"" SA"`).
+- UTF-8 files without BOM.
+- Deterministic output: fixed entry order and timestamps, so the same package always produces the same bytes and the
+  same hash, which lets you compare two runs or prove what was filed.
 
 ```java
-byte[] zip = new XbrlCsvWriter().ecrire(paquet);
-String empreinte = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(zip));
+byte[] zip = new XbrlCsvWriter().write(reportPackage);
+String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(zip));
 
-try (OutputStream sortie = Files.newOutputStream(Path.of(paquet.nom() + ".zip"))) {
-    new XbrlCsvWriter().ecrire(paquet, sortie);
+try (OutputStream out = Files.newOutputStream(Path.of(reportPackage.name() + ".zip"))) {
+    new XbrlCsvWriter().write(reportPackage, out);
 }
 ```
 
-### Relecture d'un paquet : `XbrlCsvReader`
+### Reading a package: `XbrlCsvReader`
 
-`lire(byte[])` ou `lire(InputStream)` reconstruit un `PaquetDeRapport`, par exemple à partir du dépôt de l'année
-précédente d'un client. Un paquet écrit puis relu redonne le même nom, le même point d'entrée, les mêmes paramètres,
-indicateurs et tableaux.
+`read(byte[])` or `read(InputStream)` rebuilds a `ReportPackage`, for example from a client's filing of the previous
+year. A package written then read back gives the same name, entry point, parameters, filing indicators and tables.
 
-- Le paquet est repéré par son `reports/report.json` ; le point d'entrée vient de `documentInfo.extends`.
-- Chaque autre `.csv` de `reports/` devient une `Table` dont le code est déduit du nom de fichier ; la première ligne
-  est l'en-tête des colonnes.
-- Tolérant à l'entrée : BOM UTF-8 et fins de ligne LF seules acceptés, lignes vides finales ignorées.
+- The package is located by its `reports/report.json`; the entry point comes from `documentInfo.extends`.
+- Every other `.csv` in `reports/` becomes a `Table` whose code is derived from the file name; the first row is the
+  column header.
+- Lenient on input: UTF-8 BOM and bare LF line endings accepted, trailing empty lines ignored.
 
-Les archives malveillantes ou cassées sont refusées par une `IllegalArgumentException` :
+Malicious or broken archives are rejected with an `IllegalArgumentException`:
 
-| Cas | Message |
+| Case | Message |
 |---|---|
-| Chemin absolu ou qui remonte (`../`) | `Paquet invalide : chemin interdit ...` |
-| Plus de 500 entrées | `Paquet invalide : trop d'entrées` |
-| Plus de 200 Mo une fois décompressé | `Paquet invalide : taille décompressée excessive` |
-| Pas un ZIP, ou ZIP vide | `Paquet invalide : archive vide ou non ZIP` |
-| `reports/report.json` absent | `Paquet invalide : reports/report.json absent` |
-| `report.json` illisible ou sans `documentInfo.extends` | `Paquet invalide : ...` |
-| Guillemet non fermé dans un CSV | `CSV invalide : guillemet non fermé` |
+| Absolute path or path climbing out (`../`) | `Invalid package: forbidden path ...` |
+| More than 500 entries | `Invalid package: too many entries` |
+| More than 200 MB uncompressed | `Invalid package: uncompressed size too large` |
+| Not a ZIP, or empty ZIP | `Invalid package: empty or non-ZIP archive` |
+| `reports/report.json` missing | `Invalid package: reports/report.json missing` |
+| `report.json` unreadable or without `documentInfo.extends` | `Invalid package: ...` |
+| Unclosed quote in a CSV | `Invalid CSV: unclosed quote` |
 
-Une erreur d'entrée/sortie du flux lu est remontée en `UncheckedIOException`.
+An I/O error on the input stream is raised as an `UncheckedIOException`.
 
-### Contrôles structurels : `ValidateurStructurel`
+### Structural checks: `StructuralValidator`
 
-`valider(paquet)` renvoie la liste des anomalies, vide si le paquet est correct. Ces contrôles ne dépendent pas de
-la taxonomie : ils repèrent ce qui ferait rejeter le paquet avant même la lecture de son contenu.
+`validate(reportPackage)` returns the list of issues, empty if the package is correct. These checks do not depend on
+the taxonomy: they catch what would get the package rejected before its content is even read.
 
-Chaque `MessageDeValidation` porte une gravité (`BLOQUANT` empêche le dépôt, `ALERTE` est à examiner), un code de
-règle stable, et quand c'est pertinent le tableau, le numéro de ligne de données (1 = première ligne après l'en-tête)
-et la colonne concernés, plus un texte lisible.
+Each `ValidationMessage` carries a severity (`BLOCKING` prevents filing, `WARNING` should be reviewed), a stable rule
+code, and when relevant the table, the data row number (1 = first row after the header) and the column concerned,
+plus a human-readable text.
 
 ```java
-List<MessageDeValidation> messages = new ValidateurStructurel().valider(paquet);
-boolean deposable = messages.stream().noneMatch(m -> m.gravite() == MessageDeValidation.Gravite.BLOQUANT);
-messages.forEach(m -> System.out.printf("%s %s %s ligne %s : %s%n",
-        m.gravite(), m.code(), m.table(), m.ligne(), m.texte()));
+List<ValidationMessage> messages = new StructuralValidator().validate(reportPackage);
+boolean fileable = messages.stream().noneMatch(m -> m.severity() == ValidationMessage.Severity.BLOCKING);
+messages.forEach(m -> System.out.printf("%s %s %s row %s: %s%n",
+        m.severity(), m.code(), m.table(), m.row(), m.text()));
 ```
 
-| Code | Gravité | Contrôle |
+| Code | Severity | Check |
 |---|---|---|
-| `XC-NOM-PAQUET` | bloquant | Nom du paquet limité aux lettres, chiffres, `.`, `-` et `_` |
-| `XC-POINT-ENTREE` | bloquant | Point d'entrée de la taxonomie non vide |
-| `XC-PARAM-ENTITE` | bloquant | Paramètre `entityID` présent |
-| `XC-PARAM-PERIODE` | bloquant | Paramètre `refPeriod` présent, au format `AAAA-MM-JJ` |
-| `XC-PARAM-DEVISE` | bloquant | `baseCurrency`, s'il est fourni, est un code ISO 4217 (`EUR` ou `iso4217:EUR`) |
-| `XC-INDICATEUR-DOUBLON` | bloquant | Pas deux indicateurs de dépôt pour le même modèle |
-| `XC-TABLE-DOUBLON` | bloquant | Pas deux tableaux de même code |
-| `XC-TABLE-NON-DECLAREE` | bloquant | Tout tableau présent est déclaré dans `FilingIndicators.csv` |
-| `XC-TABLE-ABSENTE` | bloquant | Tout modèle déclaré est présent dans le paquet |
-| `XC-TABLE-CODE` | bloquant | Code de tableau de la forme `B_01.01` |
-| `XC-TABLE-COLONNES` | bloquant | Le tableau a au moins une colonne |
-| `XC-COLONNE-VIDE` | bloquant | Pas de nom de colonne vide |
-| `XC-COLONNE-DOUBLON` | bloquant | Pas deux colonnes de même code |
-| `XC-LIGNE-LARGEUR` | bloquant | Chaque ligne a autant de valeurs que de colonnes |
-| `XC-LIGNE-VIDE` | alerte | Ligne entièrement vide |
+| `XC-PACKAGE-NAME` | blocking | Package name limited to letters, digits, `.`, `-` and `_` |
+| `XC-ENTRY-POINT` | blocking | Taxonomy entry point not empty |
+| `XC-PARAM-ENTITY` | blocking | `entityID` parameter present |
+| `XC-PARAM-PERIOD` | blocking | `refPeriod` parameter present, in `YYYY-MM-DD` format |
+| `XC-PARAM-CURRENCY` | blocking | `baseCurrency`, if supplied, is an ISO 4217 code (`EUR` or `iso4217:EUR`) |
+| `XC-INDICATOR-DUPLICATE` | blocking | No two filing indicators for the same template |
+| `XC-TABLE-DUPLICATE` | blocking | No two tables with the same code |
+| `XC-TABLE-UNDECLARED` | blocking | Every table present is declared in `FilingIndicators.csv` |
+| `XC-TABLE-MISSING` | blocking | Every declared template is present in the package |
+| `XC-TABLE-CODE` | blocking | Table code of the form `B_01.01` |
+| `XC-TABLE-COLUMNS` | blocking | The table has at least one column |
+| `XC-COLUMN-EMPTY` | blocking | No empty column name |
+| `XC-COLUMN-DUPLICATE` | blocking | No two columns with the same code |
+| `XC-ROW-WIDTH` | blocking | Every row has as many values as there are columns |
+| `XC-ROW-EMPTY` | warning | Entirely empty row |
 
-La liste des codes est exposée par `ValidateurStructurel.REGLES`, par exemple pour annoncer combien de règles un
-contrôle a vérifiées ; un test garantit qu'elle reprend tous les codes émis.
+The list of codes is exposed by `StructuralValidator.RULES`, for example to report how many rules a check has
+verified; a test guarantees it covers every code emitted.
 
-### Identifiants LEI : `Lei`
+### LEI identifiers: `Lei`
 
-Un LEI (ISO 17442) compte 18 caractères alphanumériques majuscules suivis de 2 chiffres de contrôle (ISO 7064
-MOD 97-10).
+A LEI (ISO 17442) has 18 upper-case alphanumeric characters followed by 2 check digits (ISO 7064 MOD 97-10).
 
 ```java
-Lei.estValide("506700GE1G29325QX363");      // true
-Lei.estValide("506700GE1G29325QX364");      // false : mauvaise clé
-Lei.of(" 506700ge1g29325qx363 ").valeur();  // "506700GE1G29325QX363" : espaces retirés, majuscules
-Lei.of("506700GE1G29325QX364");             // IllegalArgumentException
-Lei.cleDeControle("506700GE1G29325QX3");    // "63"
+Lei.isValid("506700GE1G29325QX363");       // true
+Lei.isValid("506700GE1G29325QX364");       // false: wrong check digits
+Lei.of(" 506700ge1g29325qx363 ").value();  // "506700GE1G29325QX363": whitespace stripped, upper-cased
+Lei.of("506700GE1G29325QX364");            // IllegalArgumentException
+Lei.checkDigits("506700GE1G29325QX3");     // "63"
 ```
 
-`Lei.of` normalise avant de valider ; le constructeur `new Lei(...)` exige une valeur déjà normalisée.
+`Lei.of` normalises before validating; the constructor `new Lei(...)` requires an already normalised value.
 
-## Construire
+## Build
 
 ```bash
-mvn verify      # compile et lance les tests
-mvn install     # installe eu.registredora:xbrl-csv:0.1.0-SNAPSHOT dans le dépôt Maven local
+mvn verify      # compiles and runs the tests
+mvn install     # installs eu.registredora:xbrl-csv:0.1.0-SNAPSHOT in the local Maven repository
 ```
 
-La CI (GitHub Actions, Java 21 Temurin) lance `mvn -B verify` et vérifie la syntaxe du script de synchronisation à
-chaque push sur `main` et à chaque pull request.
+CI (GitHub Actions, Java 21 Temurin) runs `mvn -B verify` and checks the sync script's syntax on every push to
+`main` and on every pull request.
 
-## D'où vient ce code
+## Where this code comes from
 
-La bibliothèque est développée dans le dépôt de la plateforme, `anisgodev/Registre_information`, module
-`registre-dora/xbrl-csv`, qui reste la source. Ce dépôt en est une copie autonome : même historique git (extrait
-avec `git subtree split`), même code, et un `pom.xml` sans parent. Le commit d'origine de la dernière
-synchronisation est noté dans `SOURCE-PLATEFORME`.
+The library is developed in the platform repository, `anisgodev/Registre_information`, module
+`registre-dora/xbrl-csv`, which remains the source. This repository is a standalone copy of it: same git history
+(extracted with `git subtree split`), same code, and a `pom.xml` without a parent. The source commit of the last sync
+is recorded in `PLATFORM-SOURCE`.
 
-| Cas | Commande (depuis ce dépôt) |
+| Case | Command (from this repository) |
 |---|---|
-| Après un changement de `xbrl-csv` dans la plateforme | `scripts/synchroniser.sh <chemin de Registre_information>`, puis `mvn verify` et commit de `src/`, `pom.xml`, `SOURCE-PLATEFORME` |
-| Savoir si ce dépôt est à jour | `scripts/synchroniser.sh --verifier <chemin de Registre_information>` |
-| Changement fait ici d'abord | `scripts/synchroniser.sh --vers-plateforme <chemin de Registre_information>` recopie `src/` dans la plateforme (un changement de dépendances du `pom.xml` est signalé, à reporter à la main) ; commit là-bas, puis synchronisation normale ici |
+| After a change to `xbrl-csv` in the platform | `scripts/sync.sh <path to Registre_information>`, then `mvn verify` and commit `src/`, `pom.xml`, `PLATFORM-SOURCE` |
+| Check whether this repository is up to date | `scripts/sync.sh --check <path to Registre_information>` |
+| Change made here first | `scripts/sync.sh --to-platform <path to Registre_information>` copies `src/` into the platform (a change to the `pom.xml` dependencies is reported, to be applied by hand); commit there, then sync normally here |
 
-Le seul écart permis entre les deux est le `pom.xml` : le script remplace le parent `registre-dora` par la version,
-les propriétés Java et les versions de plugins lues dans le pom parent de la plateforme.
+The only allowed difference between the two is the `pom.xml`: the script replaces the `registre-dora` parent with the
+version, Java properties and plugin versions read from the platform's parent pom, and keeps this repository's `<url>`
+and `<licenses>`.
 
-Le bac à sable (`anisgodev/registre-bac-a-sable`) garde sa propre copie, synchronisée depuis la plateforme par son
+The sandbox (`anisgodev/registre-bac-a-sable`) keeps its own copy, synced from the platform by its
 `scripts/synchroniser-moteur.sh`.
 
-## Licence
+## Support the project
 
-Tous droits réservés : aucune licence n'est accordée à ce jour.
+xBRL-CSV is free and open source. If it saves you time, you can support its development through
+[GitHub Sponsors](https://github.com/sponsors/anisgodev) (the "Sponsor" button at the top of the repository). Companies
+that rely on it for their DORA filings are especially welcome to sponsor.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE). You may use, modify and redistribute this library, including
+in commercial and closed-source products, provided you keep the copyright and license notices.

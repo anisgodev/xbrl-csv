@@ -15,7 +15,7 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
-      - name: Compiler et tester
+      - name: Build and test
         run: mvn -B verify
-      - name: Script de synchronisation
-        run: bash -n scripts/synchroniser.sh
+      - name: Sync script
+        run: bash -n scripts/sync.sh

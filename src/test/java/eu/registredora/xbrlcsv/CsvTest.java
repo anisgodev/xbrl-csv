@@ -10,26 +10,26 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class CsvTest {
 
     @Test
-    void echappe_virgules_guillemets_et_retours() {
-        String csv = Csv.ecrire(List.of("a", "b"), List.of(List.of("x,y", "dit \"oui\""), List.of("ligne\nsuivante", "")));
-        assertThat(csv).isEqualTo("a,b\r\n\"x,y\",\"dit \"\"oui\"\"\"\r\n\"ligne\nsuivante\",\r\n");
+    void escapes_commas_quotes_and_line_breaks() {
+        String csv = Csv.write(List.of("a", "b"), List.of(List.of("x,y", "says \"yes\""), List.of("line\nnext", "")));
+        assertThat(csv).isEqualTo("a,b\r\n\"x,y\",\"says \"\"yes\"\"\"\r\n\"line\nnext\",\r\n");
     }
 
     @Test
-    void relit_ce_qu_il_ecrit() {
-        List<List<String>> lignes = List.of(List.of("x,y", "dit \"oui\""), List.of("é à ü", ""));
-        String csv = Csv.ecrire(List.of("a", "b"), lignes);
-        List<List<String>> relu = Csv.lire(csv);
-        assertThat(relu).containsExactly(List.of("a", "b"), lignes.get(0), lignes.get(1));
+    void reads_back_what_it_writes() {
+        List<List<String>> rows = List.of(List.of("x,y", "says \"yes\""), List.of("é à ü", ""));
+        String csv = Csv.write(List.of("a", "b"), rows);
+        List<List<String>> read = Csv.read(csv);
+        assertThat(read).containsExactly(List.of("a", "b"), rows.get(0), rows.get(1));
     }
 
     @Test
-    void accepte_lf_seul_et_bom() {
-        assertThat(Csv.lire("﻿a,b\n1,2\n")).containsExactly(List.of("a", "b"), List.of("1", "2"));
+    void accepts_lf_only_and_bom() {
+        assertThat(Csv.read("﻿a,b\n1,2\n")).containsExactly(List.of("a", "b"), List.of("1", "2"));
     }
 
     @Test
-    void refuse_un_guillemet_non_ferme() {
-        assertThatThrownBy(() -> Csv.lire("a\n\"x")).isInstanceOf(IllegalArgumentException.class);
+    void rejects_an_unclosed_quote() {
+        assertThatThrownBy(() -> Csv.read("a\n\"x")).isInstanceOf(IllegalArgumentException.class);
     }
 }

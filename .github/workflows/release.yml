@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag vX.Y.Z: publishes io.github.anisgodev:xbrl-csv:X.Y.Z to Maven Central and creates the GitHub Release.
+# Push a tag vX.Y.Z: publishes tech.anisgodhbane:xbrl-csv:X.Y.Z to Maven Central and creates the GitHub Release.
 on:
   push:
     tags: ["v*"]

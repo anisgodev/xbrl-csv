@@ -41,13 +41,13 @@ The library is published on Maven Central:
 
 ```xml
 <dependency>
-    <groupId>io.anisgodev.tech</groupId>
+    <groupId>io.github.anisgodev</groupId>
     <artifactId>xbrl-csv</artifactId>
     <version>0.1.0</version>
 </dependency>
 ```
 
-The Java packages stay `eu.registredora.xbrlcsv`; only the Maven coordinates use `io.anisgodev.tech`.
+The Java packages stay `eu.registredora.xbrlcsv`; only the Maven coordinates use `io.github.anisgodev`.
 
 ## Features
 
@@ -205,7 +205,7 @@ Lei.checkDigits("506700GE1G29325QX3");     // "63"
 
 ```bash
 mvn verify      # compiles and runs the tests
-mvn install     # installs io.anisgodev.tech:xbrl-csv:0.1.0-SNAPSHOT in the local Maven repository
+mvn install     # installs io.github.anisgodev:xbrl-csv:0.1.0-SNAPSHOT in the local Maven repository
 ```
 
 CI (GitHub Actions, Java 21 Temurin) runs `mvn -B verify` and checks the sync script's syntax on every push to

@@ -37,15 +37,17 @@ byte[] zip = new XbrlCsvWriter().write(reportPackage);
 ReportPackage readBack = new XbrlCsvReader().read(zip);
 ```
 
-To use it in another project, install it in the local Maven repository (see [Build](#build)) and declare:
+The library is published on Maven Central:
 
 ```xml
 <dependency>
-    <groupId>eu.registredora</groupId>
+    <groupId>io.anisgodev.tech</groupId>
     <artifactId>xbrl-csv</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
 </dependency>
 ```
+
+The Java packages stay `eu.registredora.xbrlcsv`; only the Maven coordinates use `io.anisgodev.tech`.
 
 ## Features
 
@@ -203,11 +205,35 @@ Lei.checkDigits("506700GE1G29325QX3");     // "63"
 
 ```bash
 mvn verify      # compiles and runs the tests
-mvn install     # installs eu.registredora:xbrl-csv:0.1.0-SNAPSHOT in the local Maven repository
+mvn install     # installs io.anisgodev.tech:xbrl-csv:0.1.0-SNAPSHOT in the local Maven repository
 ```
 
 CI (GitHub Actions, Java 21 Temurin) runs `mvn -B verify` and checks the sync script's syntax on every push to
 `main` and on every pull request.
+
+## Release
+
+Pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`: it sets the version to `X.Y.Z`, builds and tests,
+attaches the sources and javadoc jars, signs everything with GPG, publishes to Maven Central (Sonatype Central
+Portal) and creates the GitHub Release with the jars.
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+The workflow needs four repository secrets (Settings > Secrets and variables > Actions):
+
+| Secret | Value |
+|---|---|
+| `CENTRAL_TOKEN_USERNAME` | username of a user token generated at central.sonatype.com > View Account > Generate User Token |
+| `CENTRAL_TOKEN_PASSWORD` | password of that user token |
+| `GPG_PRIVATE_KEY` | ASCII-armoured private key: `gpg --armor --export-secret-keys <KEY_ID>` |
+| `GPG_PASSPHRASE` | passphrase of that key |
+
+The public key must be on a key server Central checks, e.g. `gpg --keyserver keyserver.ubuntu.com --send-keys <KEY_ID>`.
+
+To publish from a workstation instead: put the token in `~/.m2/settings.xml` under a `<server>` with id `central`,
+then run `mvn -Prelease -Dgpg.signer=gpg deploy`.
 
 ## Where this code comes from
 

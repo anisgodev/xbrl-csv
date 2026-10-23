@@ -4,52 +4,52 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
- * Legal Entity Identifier (ISO 17442) : 18 caractères alphanumériques suivis de 2 chiffres de contrôle
- * calculés selon ISO 7064 MOD 97-10.
+ * Legal Entity Identifier (ISO 17442): 18 alphanumeric characters followed by 2 check digits computed with
+ * ISO 7064 MOD 97-10.
  */
-public record Lei(String valeur) {
+public record Lei(String value) {
 
     private static final Pattern FORMAT = Pattern.compile("[0-9A-Z]{18}[0-9]{2}");
 
     public Lei {
-        Objects.requireNonNull(valeur, "valeur");
-        if (!estValide(valeur)) {
-            throw new IllegalArgumentException("LEI invalide : " + valeur);
+        Objects.requireNonNull(value, "value");
+        if (!isValid(value)) {
+            throw new IllegalArgumentException("Invalid LEI: " + value);
         }
     }
 
-    public static Lei of(String valeur) {
-        return new Lei(valeur == null ? null : valeur.strip().toUpperCase());
+    public static Lei of(String value) {
+        return new Lei(value == null ? null : value.strip().toUpperCase());
     }
 
-    /** Vrai si la chaîne a le format d'un LEI et une clé de contrôle correcte. */
-    public static boolean estValide(String valeur) {
-        if (valeur == null || !FORMAT.matcher(valeur).matches()) {
+    /** True if the string has the format of a LEI and correct check digits. */
+    public static boolean isValid(String value) {
+        if (value == null || !FORMAT.matcher(value).matches()) {
             return false;
         }
-        return reste97(valeur) == 1;
+        return mod97(value) == 1;
     }
 
-    /** Calcule les deux chiffres de contrôle pour un préfixe de 18 caractères. */
-    public static String cleDeControle(String prefixe18) {
-        if (prefixe18 == null || !prefixe18.matches("[0-9A-Z]{18}")) {
-            throw new IllegalArgumentException("Le préfixe doit contenir 18 caractères alphanumériques majuscules");
+    /** Computes the two check digits for an 18-character prefix. */
+    public static String checkDigits(String prefix18) {
+        if (prefix18 == null || !prefix18.matches("[0-9A-Z]{18}")) {
+            throw new IllegalArgumentException("The prefix must contain 18 uppercase alphanumeric characters");
         }
-        int cle = 98 - reste97(prefixe18 + "00");
-        return String.format("%02d", cle);
+        int check = 98 - mod97(prefix18 + "00");
+        return String.format("%02d", check);
     }
 
-    private static int reste97(String s) {
-        int reste = 0;
+    private static int mod97(String s) {
+        int remainder = 0;
         for (int i = 0; i < s.length(); i++) {
-            int chiffre = Character.digit(s.charAt(i), 36);
-            reste = (chiffre > 9 ? reste * 100 + chiffre : reste * 10 + chiffre) % 97;
+            int digit = Character.digit(s.charAt(i), 36);
+            remainder = (digit > 9 ? remainder * 100 + digit : remainder * 10 + digit) % 97;
         }
-        return reste;
+        return remainder;
     }
 
     @Override
     public String toString() {
-        return valeur;
+        return value;
     }
 }

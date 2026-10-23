@@ -11,31 +11,31 @@ class LeiTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"506700GE1G29325QX363", "529900T8BM49AURSDO55", "5493001KJTIIGC8Y1R12"})
-    void accepte_des_lei_reels(String lei) {
-        assertThat(Lei.estValide(lei)).isTrue();
-        assertThat(Lei.of(lei).valeur()).isEqualTo(lei);
+    void accepts_real_leis(String lei) {
+        assertThat(Lei.isValid(lei)).isTrue();
+        assertThat(Lei.of(lei).value()).isEqualTo(lei);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"506700GE1G29325QX364", "506700GE1G29325QX36", "506700ge1g29325qx363x", "", "ABCDEFGHIJKLMNOPQRST"})
-    void refuse_les_lei_invalides(String lei) {
-        assertThat(Lei.estValide(lei)).isFalse();
+    void rejects_invalid_leis(String lei) {
+        assertThat(Lei.isValid(lei)).isFalse();
     }
 
     @Test
-    void normalise_la_casse_et_les_espaces() {
-        assertThat(Lei.of(" 506700ge1g29325qx363 ").valeur()).isEqualTo("506700GE1G29325QX363");
+    void normalises_case_and_whitespace() {
+        assertThat(Lei.of(" 506700ge1g29325qx363 ").value()).isEqualTo("506700GE1G29325QX363");
     }
 
     @Test
-    void refuse_null_et_lei_faux_a_la_construction() {
-        assertThat(Lei.estValide(null)).isFalse();
+    void rejects_null_and_wrong_lei_on_construction() {
+        assertThat(Lei.isValid(null)).isFalse();
         assertThatThrownBy(() -> Lei.of("506700GE1G29325QX364")).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void calcule_la_cle_de_controle() {
-        assertThat(Lei.cleDeControle("506700GE1G29325QX3")).isEqualTo("63");
-        assertThat(Lei.cleDeControle("5493001KJTIIGC8Y1R")).isEqualTo("12");
+    void computes_the_check_digits() {
+        assertThat(Lei.checkDigits("506700GE1G29325QX3")).isEqualTo("63");
+        assertThat(Lei.checkDigits("5493001KJTIIGC8Y1R")).isEqualTo("12");
     }
 }

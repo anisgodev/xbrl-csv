@@ -28,6 +28,8 @@
 
 ### Changed
 
+- **Breaking:** the Java package is renamed from `eu.registredora.xbrlcsv` to `tech.anisgodhbane.xbrlcsv`, matching the
+  Maven coordinates; update imports (`import tech.anisgodhbane.xbrlcsv.*;`) and any `requires eu.registredora.xbrlcsv`.
 - `StructuralValidator` warns with the new rule `XC-PARAM-LEI` when `entityID` does not carry a valid LEI, and with
   `XC-PARAM-CURRENCY` when `baseCurrency` is missing.
 - `StructuralValidator` returns messages in a stable order; `XC-TABLE-MISSING` follows the declaration order.
@@ -40,7 +42,7 @@
   `templateID,reported`, or with a row of other than two values (such rows used to be skipped).
 - `XbrlCsvReader` rejects duplicate entries, several `reports/report.json`, and a `reported` value other than `true`
   or `false` (previously read as `false`).
-- The jar declares `Automatic-Module-Name: eu.registredora.xbrlcsv`; `mvn verify` writes a JaCoCo coverage report; CI
+- The jar declares `Automatic-Module-Name: tech.anisgodhbane.xbrlcsv`; `mvn verify` writes a JaCoCo coverage report; CI
   also runs on Java 25 and builds the Javadoc; `mvn verify` fails below 90% instruction or 80% branch coverage.
 
 ## 0.1.0 (2026-10-24)

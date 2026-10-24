@@ -1,4 +1,4 @@
-package eu.registredora.xbrlcsv;
+package tech.anisgodhbane.xbrlcsv;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

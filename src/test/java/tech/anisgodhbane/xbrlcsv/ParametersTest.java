@@ -1,4 +1,4 @@
-package eu.registredora.xbrlcsv;
+package tech.anisgodhbane.xbrlcsv;
 
 import org.junit.jupiter.api.Test;
 

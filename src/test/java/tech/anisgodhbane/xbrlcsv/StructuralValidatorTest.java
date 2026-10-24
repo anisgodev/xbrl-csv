@@ -1,4 +1,4 @@
-package eu.registredora.xbrlcsv;
+package tech.anisgodhbane.xbrlcsv;
 
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +17,7 @@ class StructuralValidatorTest {
 
     @Test
     void the_rule_list_covers_every_emitted_code() throws IOException {
-        String source = Files.readString(Path.of("src/main/java/eu/registredora/xbrlcsv/StructuralValidator.java"));
+        String source = Files.readString(Path.of("src/main/java/tech/anisgodhbane/xbrlcsv/StructuralValidator.java"));
         List<String> emitted = java.util.regex.Pattern.compile("(?:blocking|warning)\\(\"(XC-[A-Z-]+)\"").matcher(source)
                 .results().map(m -> m.group(1)).distinct().toList();
         assertThat(emitted).isNotEmpty();

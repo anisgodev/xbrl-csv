@@ -18,7 +18,7 @@ The taxonomy's own checks (EBA rules) are not here: the platform delegates them 
 ## Quick start
 
 ```java
-import eu.registredora.xbrlcsv.*;
+import tech.anisgodhbane.xbrlcsv.*;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -47,7 +47,7 @@ The library is published on Maven Central:
 </dependency>
 ```
 
-The Java packages stay `eu.registredora.xbrlcsv`; only the Maven coordinates use `tech.anisgodhbane`.
+The Java package is `tech.anisgodhbane.xbrlcsv`, matching the Maven coordinates (it was `eu.registredora.xbrlcsv` in 0.1.0).
 
 ## Features
 
@@ -232,7 +232,7 @@ mvn install     # installs tech.anisgodhbane:xbrl-csv:0.1.0-SNAPSHOT in the loca
 ```
 
 CI (GitHub Actions, Temurin Java 21 and 25) runs `mvn -B verify` on every push to `main` and on every pull request.
-The jar declares the module name `eu.registredora.xbrlcsv` (`Automatic-Module-Name`). Changes are listed in
+The jar declares the module name `tech.anisgodhbane.xbrlcsv` (`Automatic-Module-Name`). Changes are listed in
 [CHANGELOG.md](CHANGELOG.md).
 
 ## Release

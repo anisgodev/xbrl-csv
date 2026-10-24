@@ -15,8 +15,9 @@
   turns a `null` value into an empty string, as `Table` does, and refuses a `null` name.
 - `XbrlCsvWriter` refuses a table code that does not give a plain file name (`../x`, `B_01/01`, `parameters`...).
   Such codes produced entries outside `reports/`, or tables that disappeared when the package was read back.
-- `XbrlCsvReader` caps the number of CSV values in a package (10 million), so a small archive of commas can no
-  longer exhaust the heap.
+- `XbrlCsvReader` caps the number of CSV values in a package, 5 million by default, settable with
+  `new XbrlCsvReader(maxValues)`. A small archive of commas used to expand into hundreds of millions of values; the
+  parsed package now stays within about 250 MB of heap at the default cap.
 
 ### Changed
 

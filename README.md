@@ -143,7 +143,9 @@ year. A package written then read back is equal to the original. `read(InputStre
   (case ignored), with exactly two values on every row.
 - Every other `.csv` in `reports/` becomes a `Table` whose code is derived from the file name; the first row is the
   column header. Tables come in the order of the filing indicators, then the undeclared ones by file name.
-- The archive is held in memory while it is read: allow a few times its uncompressed size in heap.
+- The package is held in memory while it is read, and the parsed values dominate: count about 50 bytes of heap per
+  value, so up to about 250 MB at the default cap of 5 million values. A small archive can reach that cap, so size the
+  heap for it, or set your own cap with `new XbrlCsvReader(maxValues)`.
 - Lenient on input: UTF-8 BOM and bare LF line endings accepted, blank lines ignored (a quoted empty value `""` on
   its own line is kept as a row).
 
@@ -158,7 +160,7 @@ Malicious or broken archives are rejected with an `IllegalArgumentException`:
 | Two entries with the same path | `Invalid package: duplicate entry ...` |
 | `reports/report.json` missing | `Invalid package: reports/report.json missing` |
 | More than one `reports/report.json` | `Invalid package: several reports/report.json ...` |
-| More than 10 million CSV values in all | `Invalid CSV: too many values ...` |
+| More CSV values in all than the cap (5 million by default) | `Invalid CSV: too many values ...` |
 | `parameters.csv` or `FilingIndicators.csv` with another header, or a row without exactly two values | `Invalid package: parameters.csv ...` |
 | `reported` other than `true` or `false` in `FilingIndicators.csv` | `Invalid package: reported must be true or false ...` |
 | `report.json` unreadable or without `documentInfo.extends` | `Invalid package: ...` |

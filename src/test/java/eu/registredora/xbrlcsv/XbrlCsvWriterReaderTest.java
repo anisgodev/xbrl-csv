@@ -202,12 +202,25 @@ class XbrlCsvWriterReaderTest {
     }
 
     @Test
-    void rejects_a_package_with_too_many_csv_values() throws Exception {
-        byte[] archive = zip(Map.of("x/reports/report.json", REPORT_JSON,
-                "x/reports/b_01.01.csv", ",".repeat(XbrlCsvReader.MAX_VALUES)));
-        assertThatThrownBy(() -> reader.read(archive))
+    void rejects_a_package_with_more_csv_values_than_the_reader_allows() {
+        // simplePackage holds 26 values: 8 in parameters.csv, 6 in FilingIndicators.csv, 6 in each table.
+        XbrlCsvReader strict = new XbrlCsvReader(20);
+        byte[] archive = writer.write(ReportPackageFixtures.simplePackage());
+
+        assertThat(new XbrlCsvReader(26).read(archive)).isEqualTo(ReportPackageFixtures.simplePackage());
+        assertThatThrownBy(() -> strict.read(archive))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("too many values");
+    }
+
+    @Test
+    void refuses_a_value_cap_below_one() {
+        assertThatThrownBy(() -> new XbrlCsvReader(0)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void caps_csv_values_at_five_million_by_default() {
+        assertThat(XbrlCsvReader.DEFAULT_MAX_VALUES).isEqualTo(5_000_000);
     }
 
     @Test

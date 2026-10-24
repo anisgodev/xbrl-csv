@@ -23,9 +23,12 @@ import java.util.zip.ZipInputStream;
 /**
  * Reads back an xBRL-CSV report package archive, for example a client's filing from the previous year.
  *
- * <p>Guards against malicious archives: uncompressed size, number of entries and number of CSV values are capped, paths
- * climbing out of the tree, duplicate entries and several reports in one archive are rejected. The archive is read
- * whole into memory: allow for a few times the uncompressed size in heap (at most 200 MB uncompressed).
+ * <p>Guards against malicious archives: uncompressed size (200 MB), number of entries (500) and number of CSV values
+ * are capped, paths climbing out of the tree, duplicate entries and several reports in one archive are rejected.
+ *
+ * <p>The package is read whole into memory, and the parsed values dominate: count about 50 bytes of heap per value, so
+ * up to about 250 MB at the default cap of {@value #DEFAULT_MAX_VALUES} values. A small archive can reach that cap;
+ * {@link #XbrlCsvReader(int)} sets a lower or higher one.
  *
  * <p>{@code parameters.csv} must have the header {@code name,value} and {@code FilingIndicators.csv} the header
  * {@code templateID,reported} (case ignored), each row with exactly two values. Tables come back in the order of the
@@ -35,13 +38,27 @@ public final class XbrlCsvReader {
 
     private static final long MAX_UNCOMPRESSED_SIZE = 200L * 1024 * 1024;
     private static final int MAX_ENTRIES = 500;
-    /** Cap on the CSV values of a package, all files together: bounds the memory used by the parsed rows. */
-    static final int MAX_VALUES = 10_000_000;
-
     private static final String PARAMETERS = "parameters.csv";
     private static final String FILING_INDICATORS = "FilingIndicators.csv";
 
+    /** Default cap on the CSV values of a package, all files together; a very large register holds 3 to 5 million. */
+    public static final int DEFAULT_MAX_VALUES = 5_000_000;
+
     private final ObjectMapper json = new ObjectMapper();
+    private final int maxValues;
+
+    /** A reader capped at {@value #DEFAULT_MAX_VALUES} CSV values per package. */
+    public XbrlCsvReader() {
+        this(DEFAULT_MAX_VALUES);
+    }
+
+    /** A reader capped at {@code maxValues} CSV values per package, all files together; at least 1. */
+    public XbrlCsvReader(int maxValues) {
+        if (maxValues < 1) {
+            throw new IllegalArgumentException("maxValues must be at least 1: " + maxValues);
+        }
+        this.maxValues = maxValues;
+    }
 
     public ReportPackage read(byte[] archive) {
         return read(new ByteArrayInputStream(archive));
@@ -63,7 +80,7 @@ public final class XbrlCsvReader {
         String prefix = reportPath.substring(0, reportPath.length() - "report.json".length());
         String name = reportPath.substring(0, reportPath.indexOf('/'));
 
-        ValueBudget budget = new ValueBudget();
+        ValueBudget budget = new ValueBudget(maxValues);
         String entryPoint = readEntryPoint(files.get(reportPath));
         Parameters parameters = readParameters(files.get(prefix + PARAMETERS), budget);
         List<FilingIndicator> filingIndicators = readFilingIndicators(files.get(prefix + FILING_INDICATORS), budget);
@@ -195,9 +212,13 @@ public final class XbrlCsvReader {
         return files;
     }
 
-    /** What remains of {@link #MAX_VALUES} while one package is read. */
+    /** What remains of the value cap while one package is read. */
     private static final class ValueBudget {
-        private int remaining = MAX_VALUES;
+        private int remaining;
+
+        ValueBudget(int maxValues) {
+            remaining = maxValues;
+        }
 
         List<List<String>> read(String content) {
             List<List<String>> rows = Csv.read(content, remaining);

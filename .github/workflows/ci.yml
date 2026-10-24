@@ -24,4 +24,5 @@ jobs:
       - name: Build and test
         run: mvn -B verify
       - name: Javadoc
+        if: matrix.java == '21'
         run: mvn -B javadoc:javadoc

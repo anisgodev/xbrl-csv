@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.ByteArrayOutputStream;
+import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
@@ -30,8 +31,11 @@ import java.util.zip.ZipOutputStream;
  * <p>Files are UTF-8 without BOM. Entry order and timestamps are fixed: the same package always produces the same
  * bytes, hence the same hash, whatever the machine or its time zone.
  *
- * <p>Refuses, with an {@link IllegalArgumentException}, a package name that is not a single folder name and tables
- * whose codes give the same file name.
+ * <p>Refuses, with an {@link IllegalArgumentException}, a package name that is not a single folder name, a table code
+ * that does not give a plain file name (path separators, {@code .}, {@code ..}, or the name of {@code parameters.csv}
+ * or {@code FilingIndicators.csv}) and tables whose codes give the same file name.
+ *
+ * <p>{@link #write(ReportPackage, OutputStream)} leaves the caller's stream open.
  */
 public final class XbrlCsvWriter {
 
@@ -52,7 +56,7 @@ public final class XbrlCsvWriter {
     public void write(ReportPackage reportPackage, OutputStream out) {
         checkWritable(reportPackage);
         String root = reportPackage.name() + "/";
-        try (ZipOutputStream zip = new ZipOutputStream(out, StandardCharsets.UTF_8)) {
+        try (ZipOutputStream zip = new ZipOutputStream(new NonClosingOutputStream(out), StandardCharsets.UTF_8)) {
             add(zip, root + "META-INF/reportPackage.json", reportPackageJson());
             add(zip, root + "reports/report.json", reportJson(reportPackage.entryPoint()));
             add(zip, root + "reports/parameters.csv", Csv.write(
@@ -80,9 +84,19 @@ public final class XbrlCsvWriter {
         }
         Set<String> fileNames = new HashSet<>();
         for (Table table : reportPackage.tables()) {
+            checkTableCode(table);
             if (!fileNames.add(table.fileName())) {
                 throw new IllegalArgumentException("Two tables would be written to the same file: " + table.fileName());
             }
+        }
+    }
+
+    private static void checkTableCode(Table table) {
+        String code = table.code();
+        String fileName = table.fileName();
+        if (code.isEmpty() || code.equals(".") || code.equals("..") || code.contains("/") || code.contains("\\")
+                || fileName.equalsIgnoreCase("parameters.csv") || fileName.equalsIgnoreCase("FilingIndicators.csv")) {
+            throw new IllegalArgumentException("Invalid table code, it must give a plain file name: " + code);
         }
     }
 
@@ -106,5 +120,23 @@ public final class XbrlCsvWriter {
         zip.putNextEntry(entry);
         zip.write(content.getBytes(StandardCharsets.UTF_8));
         zip.closeEntry();
+    }
+
+    /** Closing the archive must not close the caller's stream; writes are passed through in blocks. */
+    private static final class NonClosingOutputStream extends FilterOutputStream {
+
+        NonClosingOutputStream(OutputStream out) {
+            super(out);
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            out.write(b, off, len);
+        }
+
+        @Override
+        public void close() throws IOException {
+            flush();
+        }
     }
 }

@@ -41,6 +41,7 @@ public record Table(String code, List<String> columns, List<List<String>> rows) 
         return base.toUpperCase(Locale.ROOT);
     }
 
+    /** Position of the column, or {@code -1} if the table has no such column. */
     public int columnIndex(String column) {
         return columns.indexOf(column);
     }

@@ -104,6 +104,125 @@ class XbrlCsvWriterReaderTest {
                 .hasMessageContaining("package name");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"", "../evil", "B_01/01", "B_01\\01", ".", "..", "parameters", "PARAMETERS",
+            "FilingIndicators"})
+    void refuses_a_table_code_that_is_not_a_plain_file_name(String code) {
+        Table table = Table.builder(code, "c0010").row("x").build();
+        ReportPackage reportPackage = new ReportPackage("p", "http://x", new Parameters(Map.of()),
+                List.of(), List.of(table));
+
+        assertThatThrownBy(() -> writer.write(reportPackage))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("table code");
+    }
+
+    @Test
+    void writes_a_parameter_with_a_null_value_as_an_empty_value() throws Exception {
+        ReportPackage reportPackage = new ReportPackage("p", "http://x",
+                new Parameters(Map.of()).with(Parameters.DECIMALS_MONETARY, null), List.of(), List.of());
+
+        assertThat(content(writer.write(reportPackage)).get("p/reports/parameters.csv"))
+                .isEqualTo("name,value\r\ndecimalsMonetary,\r\n");
+    }
+
+    @Test
+    void leaves_the_caller_output_stream_open() {
+        CloseTrackingOutputStream out = new CloseTrackingOutputStream();
+        writer.write(ReportPackageFixtures.simplePackage(), out);
+
+        assertThat(out.closed).isFalse();
+        assertThat(reader.read(out.toByteArray())).isEqualTo(ReportPackageFixtures.simplePackage());
+    }
+
+    @Test
+    void leaves_the_caller_input_stream_open() {
+        CloseTrackingInputStream in = new CloseTrackingInputStream(writer.write(ReportPackageFixtures.simplePackage()));
+        reader.read(in);
+
+        assertThat(in.closed).isFalse();
+    }
+
+    @Test
+    void reads_tables_back_in_filing_indicator_order() {
+        ReportPackage original = ReportPackage.withDerivedFilingIndicators("p", "http://x",
+                Parameters.registerOfInformation("rs:X.CON", LocalDate.of(2026, 12, 31), "EUR"),
+                List.of(Table.builder("B_05.01", "c0010").row("a").build(),
+                        Table.builder("B_01.01", "c0010").row("b").build()));
+
+        assertThat(reader.read(writer.write(original))).isEqualTo(original);
+    }
+
+    @Test
+    void reads_undeclared_tables_after_the_declared_ones() throws Exception {
+        byte[] archive = zip(Map.of("x/reports/report.json", REPORT_JSON,
+                "x/reports/FilingIndicators.csv", "templateID,reported\r\nB_05.01,true\r\n",
+                "x/reports/b_01.01.csv", "c0010\r\n",
+                "x/reports/b_05.01.csv", "c0010\r\n",
+                "x/reports/b_02.01.csv", "c0010\r\n"));
+
+        assertThat(reader.read(archive).tables()).extracting(Table::code)
+                .containsExactly("B_05.01", "B_01.01", "B_02.01");
+    }
+
+    @Test
+    void rejects_a_parameters_row_without_a_value() throws Exception {
+        byte[] archive = zip(Map.of("x/reports/report.json", REPORT_JSON,
+                "x/reports/parameters.csv", "name,value\r\nentityID\r\n"));
+        assertThatThrownBy(() -> reader.read(archive))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("parameters.csv");
+    }
+
+    @Test
+    void rejects_a_filing_indicators_row_without_a_reported_value() throws Exception {
+        byte[] archive = zip(Map.of("x/reports/report.json", REPORT_JSON,
+                "x/reports/FilingIndicators.csv", "templateID,reported\r\nB_01.01\r\n"));
+        assertThatThrownBy(() -> reader.read(archive))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("FilingIndicators.csv");
+    }
+
+    @Test
+    void rejects_an_unexpected_parameters_header() throws Exception {
+        byte[] archive = zip(Map.of("x/reports/report.json", REPORT_JSON,
+                "x/reports/parameters.csv", "value,name\r\nEUR,baseCurrency\r\n"));
+        assertThatThrownBy(() -> reader.read(archive))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("parameters.csv");
+    }
+
+    @Test
+    void rejects_an_unexpected_filing_indicators_header() throws Exception {
+        byte[] archive = zip(Map.of("x/reports/report.json", REPORT_JSON,
+                "x/reports/FilingIndicators.csv", "reported,templateID\r\ntrue,B_01.01\r\n"));
+        assertThatThrownBy(() -> reader.read(archive))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("FilingIndicators.csv");
+    }
+
+    @Test
+    void rejects_a_package_with_more_csv_values_than_the_reader_allows() {
+        // simplePackage holds 26 values: 8 in parameters.csv, 6 in FilingIndicators.csv, 6 in each table.
+        XbrlCsvReader strict = new XbrlCsvReader(20);
+        byte[] archive = writer.write(ReportPackageFixtures.simplePackage());
+
+        assertThat(new XbrlCsvReader(26).read(archive)).isEqualTo(ReportPackageFixtures.simplePackage());
+        assertThatThrownBy(() -> strict.read(archive))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("too many values");
+    }
+
+    @Test
+    void refuses_a_value_cap_below_one() {
+        assertThatThrownBy(() -> new XbrlCsvReader(0)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void caps_csv_values_at_five_million_by_default() {
+        assertThat(XbrlCsvReader.DEFAULT_MAX_VALUES).isEqualTo(5_000_000);
+    }
+
     @Test
     void reads_back_a_written_package() {
         ReportPackage original = ReportPackageFixtures.simplePackage();
@@ -193,6 +312,28 @@ class XbrlCsvWriterReaderTest {
     }
 
     private static final String REPORT_JSON = "{\"documentInfo\":{\"extends\":[\"http://x\"]}}";
+
+    private static final class CloseTrackingOutputStream extends ByteArrayOutputStream {
+        boolean closed;
+
+        @Override
+        public void close() {
+            closed = true;
+        }
+    }
+
+    private static final class CloseTrackingInputStream extends ByteArrayInputStream {
+        boolean closed;
+
+        CloseTrackingInputStream(byte[] bytes) {
+            super(bytes);
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+        }
+    }
 
     private static byte[] replaceAll(byte[] bytes, String from, String to) {
         String latin1 = new String(bytes, StandardCharsets.ISO_8859_1);

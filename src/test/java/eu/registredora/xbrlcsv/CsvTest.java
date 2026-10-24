@@ -25,7 +25,7 @@ class CsvTest {
 
     @Test
     void accepts_lf_only_and_bom() {
-        assertThat(Csv.read("﻿a,b\n1,2\n")).containsExactly(List.of("a", "b"), List.of("1", "2"));
+        assertThat(Csv.read("\uFEFFa,b\n1,2\n")).containsExactly(List.of("a", "b"), List.of("1", "2"));
     }
 
     @Test
@@ -37,6 +37,18 @@ class CsvTest {
     void keeps_a_quoted_empty_row_and_ignores_blank_lines() {
         assertThat(Csv.read("a\r\n\"\"\r\n\r\nx\r\n\r\n\"\"\r\n\r\n"))
                 .containsExactly(List.of("a"), List.of(""), List.of("x"), List.of(""));
+    }
+
+    @Test
+    void rejects_more_values_than_allowed() {
+        assertThatThrownBy(() -> Csv.read("a,b\r\n1,2\r\n", 3))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("too many values");
+    }
+
+    @Test
+    void accepts_exactly_the_allowed_number_of_values() {
+        assertThat(Csv.read("a,b\r\n1,2\r\n", 4)).hasSize(2);
     }
 
     @Test

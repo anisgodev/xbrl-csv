@@ -5,11 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,15 +23,42 @@ import java.util.zip.ZipInputStream;
 /**
  * Reads back an xBRL-CSV report package archive, for example a client's filing from the previous year.
  *
- * <p>Guards against malicious archives: uncompressed size and number of entries are capped, paths climbing out of
- * the tree, duplicate entries and several reports in one archive are rejected.
+ * <p>Guards against malicious archives: uncompressed size (200 MB), number of entries (500) and number of CSV values
+ * are capped, paths climbing out of the tree, duplicate entries and several reports in one archive are rejected.
+ *
+ * <p>The package is read whole into memory, and the parsed values dominate: count about 50 bytes of heap per value, so
+ * up to about 250 MB at the default cap of {@value #DEFAULT_MAX_VALUES} values. A small archive can reach that cap;
+ * {@link #XbrlCsvReader(int)} sets a lower or higher one.
+ *
+ * <p>{@code parameters.csv} must have the header {@code name,value} and {@code FilingIndicators.csv} the header
+ * {@code templateID,reported} (case ignored), each row with exactly two values. Tables come back in the order of the
+ * filing indicators, then the undeclared ones by file name. {@link #read(InputStream)} leaves the caller's stream open.
  */
 public final class XbrlCsvReader {
 
     private static final long MAX_UNCOMPRESSED_SIZE = 200L * 1024 * 1024;
     private static final int MAX_ENTRIES = 500;
+    private static final String PARAMETERS = "parameters.csv";
+    private static final String FILING_INDICATORS = "FilingIndicators.csv";
+
+    /** Default cap on the CSV values of a package, all files together; a very large register holds 3 to 5 million. */
+    public static final int DEFAULT_MAX_VALUES = 5_000_000;
 
     private final ObjectMapper json = new ObjectMapper();
+    private final int maxValues;
+
+    /** A reader capped at {@value #DEFAULT_MAX_VALUES} CSV values per package. */
+    public XbrlCsvReader() {
+        this(DEFAULT_MAX_VALUES);
+    }
+
+    /** A reader capped at {@code maxValues} CSV values per package, all files together; at least 1. */
+    public XbrlCsvReader(int maxValues) {
+        if (maxValues < 1) {
+            throw new IllegalArgumentException("maxValues must be at least 1: " + maxValues);
+        }
+        this.maxValues = maxValues;
+    }
 
     public ReportPackage read(byte[] archive) {
         return read(new ByteArrayInputStream(archive));
@@ -50,9 +80,10 @@ public final class XbrlCsvReader {
         String prefix = reportPath.substring(0, reportPath.length() - "report.json".length());
         String name = reportPath.substring(0, reportPath.indexOf('/'));
 
+        ValueBudget budget = new ValueBudget(maxValues);
         String entryPoint = readEntryPoint(files.get(reportPath));
-        Parameters parameters = readParameters(files.get(prefix + "parameters.csv"));
-        List<FilingIndicator> filingIndicators = readFilingIndicators(files.get(prefix + "FilingIndicators.csv"));
+        Parameters parameters = readParameters(files.get(prefix + PARAMETERS), budget);
+        List<FilingIndicator> filingIndicators = readFilingIndicators(files.get(prefix + FILING_INDICATORS), budget);
 
         List<Table> tables = new ArrayList<>();
         new TreeMap<>(files).forEach((path, content) -> {
@@ -60,15 +91,21 @@ public final class XbrlCsvReader {
                 return;
             }
             String file = path.substring(prefix.length());
-            if (file.contains("/") || file.equals("parameters.csv") || file.equals("FilingIndicators.csv")) {
+            if (file.contains("/") || file.equals(PARAMETERS) || file.equals(FILING_INDICATORS)) {
                 return;
             }
-            List<List<String>> rows = Csv.read(content);
+            List<List<String>> rows = budget.read(content);
             if (rows.isEmpty()) {
                 return;
             }
             tables.add(new Table(Table.codeFromFileName(file), rows.get(0), rows.subList(1, rows.size())));
         });
+        Map<String, Integer> declarationOrder = new HashMap<>();
+        for (FilingIndicator indicator : filingIndicators) {
+            declarationOrder.putIfAbsent(indicator.templateId(), declarationOrder.size());
+        }
+        // Stable sort: undeclared tables stay in file name order, after the declared ones.
+        tables.sort(Comparator.comparingInt(t -> declarationOrder.getOrDefault(t.code(), Integer.MAX_VALUE)));
 
         return new ReportPackage(name, entryPoint, parameters, filingIndicators, tables);
     }
@@ -85,30 +122,43 @@ public final class XbrlCsvReader {
         }
     }
 
-    private static Parameters readParameters(String content) {
+    private static Parameters readParameters(String content, ValueBudget budget) {
         Map<String, String> values = new LinkedHashMap<>();
         if (content != null) {
-            List<List<String>> rows = Csv.read(content);
-            for (List<String> row : rows.subList(Math.min(1, rows.size()), rows.size())) {
-                if (row.size() >= 2) {
-                    values.put(row.get(0), row.get(1));
-                }
+            for (List<String> row : readTwoColumns(content, PARAMETERS, "name", "value", budget)) {
+                values.put(row.get(0), row.get(1));
             }
         }
         return new Parameters(values);
     }
 
-    private static List<FilingIndicator> readFilingIndicators(String content) {
+    private static List<FilingIndicator> readFilingIndicators(String content, ValueBudget budget) {
         List<FilingIndicator> filingIndicators = new ArrayList<>();
         if (content != null) {
-            List<List<String>> rows = Csv.read(content);
-            for (List<String> row : rows.subList(Math.min(1, rows.size()), rows.size())) {
-                if (row.size() >= 2) {
-                    filingIndicators.add(new FilingIndicator(row.get(0), parseReported(row.get(1).strip())));
-                }
+            for (List<String> row : readTwoColumns(content, FILING_INDICATORS, "templateID", "reported", budget)) {
+                filingIndicators.add(new FilingIndicator(row.get(0), parseReported(row.get(1).strip())));
             }
         }
         return filingIndicators;
+    }
+
+    /** The data rows of a two-column file, after checking its header and the width of every row. */
+    private static List<List<String>> readTwoColumns(String content, String file, String first, String second,
+                                                     ValueBudget budget) {
+        List<List<String>> rows = budget.read(content);
+        if (rows.isEmpty() || rows.get(0).size() != 2
+                || !rows.get(0).get(0).strip().equalsIgnoreCase(first)
+                || !rows.get(0).get(1).strip().equalsIgnoreCase(second)) {
+            throw new IllegalArgumentException("Invalid package: " + file + " must start with the header " + first
+                    + "," + second);
+        }
+        for (int i = 1; i < rows.size(); i++) {
+            if (rows.get(i).size() != 2) {
+                throw new IllegalArgumentException("Invalid package: " + file + " row " + i + " has "
+                        + rows.get(i).size() + " values instead of 2");
+            }
+        }
+        return rows.subList(1, rows.size());
     }
 
     private static boolean parseReported(String value) {
@@ -126,7 +176,7 @@ public final class XbrlCsvReader {
         Map<String, String> files = new LinkedHashMap<>();
         long total = 0;
         int entries = 0;
-        try (ZipInputStream zip = new ZipInputStream(archive, StandardCharsets.UTF_8)) {
+        try (ZipInputStream zip = new ZipInputStream(new NonClosingInputStream(archive), StandardCharsets.UTF_8)) {
             ZipEntry entry;
             byte[] buffer = new byte[8192];
             while ((entry = zip.getNextEntry()) != null) {
@@ -160,5 +210,34 @@ public final class XbrlCsvReader {
             throw new IllegalArgumentException("Invalid package: empty or non-ZIP archive");
         }
         return files;
+    }
+
+    /** What remains of the value cap while one package is read. */
+    private static final class ValueBudget {
+        private int remaining;
+
+        ValueBudget(int maxValues) {
+            remaining = maxValues;
+        }
+
+        List<List<String>> read(String content) {
+            List<List<String>> rows = Csv.read(content, remaining);
+            for (List<String> row : rows) {
+                remaining -= row.size();
+            }
+            return rows;
+        }
+    }
+
+    /** Closing the archive must not close the caller's stream. */
+    private static final class NonClosingInputStream extends FilterInputStream {
+
+        NonClosingInputStream(InputStream in) {
+            super(in);
+        }
+
+        @Override
+        public void close() {
+        }
     }
 }

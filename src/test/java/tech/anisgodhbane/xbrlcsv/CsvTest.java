@@ -1,4 +1,4 @@
-package eu.registredora.xbrlcsv;
+package tech.anisgodhbane.xbrlcsv;
 
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +26,11 @@ class CsvTest {
     @Test
     void accepts_lf_only_and_bom() {
         assertThat(Csv.read("\uFEFFa,b\n1,2\n")).containsExactly(List.of("a", "b"), List.of("1", "2"));
+    }
+
+    @Test
+    void reads_stray_quotes_leniently() {
+        assertThat(Csv.read("h\r\nab\"c\",\"a\"b\r\n")).containsExactly(List.of("h"), List.of("abc", "ab"));
     }
 
     @Test

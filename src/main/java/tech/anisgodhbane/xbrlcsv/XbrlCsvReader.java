@@ -1,4 +1,4 @@
-package eu.registredora.xbrlcsv;
+package tech.anisgodhbane.xbrlcsv;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,6 +15,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.zip.ZipEntry;
@@ -32,7 +33,9 @@ import java.util.zip.ZipInputStream;
  *
  * <p>{@code parameters.csv} must have the header {@code name,value} and {@code FilingIndicators.csv} the header
  * {@code templateID,reported} (case ignored), each row with exactly two values. Tables come back in the order of the
- * filing indicators, then the undeclared ones by file name. {@link #read(InputStream)} leaves the caller's stream open.
+ * filing indicators, then the undeclared ones by file name; a table takes the code spelled by its filing indicator,
+ * else its upper-cased file name. A parameter named twice and a {@code reports/} folder anywhere but directly in the
+ * root folder are rejected. {@link #read(InputStream)} leaves the caller's stream open.
  */
 public final class XbrlCsvReader {
 
@@ -79,12 +82,21 @@ public final class XbrlCsvReader {
         String reportPath = reportPaths.get(0);
         String prefix = reportPath.substring(0, reportPath.length() - "report.json".length());
         String name = reportPath.substring(0, reportPath.indexOf('/'));
+        if (!prefix.equals(name + "/reports/")) {
+            throw new IllegalArgumentException("Invalid package: reports/ must sit directly in the root folder: "
+                    + reportPath);
+        }
 
         ValueBudget budget = new ValueBudget(maxValues);
         String entryPoint = readEntryPoint(files.get(reportPath));
         Parameters parameters = readParameters(files.get(prefix + PARAMETERS), budget);
         List<FilingIndicator> filingIndicators = readFilingIndicators(files.get(prefix + FILING_INDICATORS), budget);
 
+        // The writer lower-cases file names: give each table the code its filing indicator spells.
+        Map<String, String> declaredCodes = new HashMap<>();
+        for (FilingIndicator indicator : filingIndicators) {
+            declaredCodes.putIfAbsent(Table.fileName(indicator.templateId()), indicator.templateId());
+        }
         List<Table> tables = new ArrayList<>();
         new TreeMap<>(files).forEach((path, content) -> {
             if (!path.startsWith(prefix) || !path.endsWith(".csv")) {
@@ -98,7 +110,8 @@ public final class XbrlCsvReader {
             if (rows.isEmpty()) {
                 return;
             }
-            tables.add(new Table(Table.codeFromFileName(file), rows.get(0), rows.subList(1, rows.size())));
+            String code = declaredCodes.getOrDefault(file.toLowerCase(Locale.ROOT), Table.codeFromFileName(file));
+            tables.add(new Table(code, rows.get(0), rows.subList(1, rows.size())));
         });
         Map<String, Integer> declarationOrder = new HashMap<>();
         for (FilingIndicator indicator : filingIndicators) {
@@ -126,7 +139,10 @@ public final class XbrlCsvReader {
         Map<String, String> values = new LinkedHashMap<>();
         if (content != null) {
             for (List<String> row : readTwoColumns(content, PARAMETERS, "name", "value", budget)) {
-                values.put(row.get(0), row.get(1));
+                if (values.put(row.get(0), row.get(1)) != null) {
+                    throw new IllegalArgumentException("Invalid package: parameter " + row.get(0) + " appears twice in "
+                            + PARAMETERS);
+                }
             }
         }
         return new Parameters(values);
@@ -214,14 +230,22 @@ public final class XbrlCsvReader {
 
     /** What remains of the value cap while one package is read. */
     private static final class ValueBudget {
+        private final int maxValues;
         private int remaining;
 
         ValueBudget(int maxValues) {
+            this.maxValues = maxValues;
             remaining = maxValues;
         }
 
         List<List<String>> read(String content) {
-            List<List<String>> rows = Csv.read(content, remaining);
+            List<List<String>> rows;
+            try {
+                rows = Csv.read(content, remaining);
+            } catch (Csv.TooManyValuesException e) {
+                throw new IllegalArgumentException("Invalid package: too many CSV values (more than " + maxValues
+                        + " in all)", e);
+            }
             for (List<String> row : rows) {
                 remaining -= row.size();
             }

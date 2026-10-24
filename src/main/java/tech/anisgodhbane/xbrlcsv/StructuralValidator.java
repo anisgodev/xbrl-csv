@@ -1,4 +1,4 @@
-package eu.registredora.xbrlcsv;
+package tech.anisgodhbane.xbrlcsv;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -17,9 +17,10 @@ public final class StructuralValidator {
 
     /** Codes of the rules applied, to report how many rules a check has verified. */
     public static final List<String> RULES = List.of(
-            "XC-PACKAGE-NAME", "XC-ENTRY-POINT", "XC-PARAM-ENTITY", "XC-PARAM-PERIOD", "XC-PARAM-CURRENCY",
-            "XC-INDICATOR-DUPLICATE", "XC-TABLE-DUPLICATE", "XC-TABLE-UNDECLARED", "XC-TABLE-MISSING", "XC-TABLE-CODE",
-            "XC-TABLE-COLUMNS", "XC-COLUMN-EMPTY", "XC-COLUMN-DUPLICATE", "XC-ROW-WIDTH", "XC-ROW-EMPTY");
+            "XC-PACKAGE-NAME", "XC-ENTRY-POINT", "XC-PARAM-ENTITY", "XC-PARAM-LEI", "XC-PARAM-PERIOD",
+            "XC-PARAM-CURRENCY", "XC-INDICATOR-DUPLICATE", "XC-TABLE-DUPLICATE", "XC-TABLE-UNDECLARED",
+            "XC-TABLE-MISSING", "XC-TABLE-CODE", "XC-TABLE-COLUMNS", "XC-COLUMN-EMPTY", "XC-COLUMN-DUPLICATE",
+            "XC-ROW-WIDTH", "XC-ROW-EMPTY");
 
     private static final Pattern PACKAGE_NAME = Pattern.compile("[A-Za-z0-9._-]+");
     private static final Pattern TABLE_CODE = Pattern.compile("[A-Z]_[0-9]{2}\\.[0-9]{2}");
@@ -54,6 +55,9 @@ public final class StructuralValidator {
         if (entity == null || entity.isBlank()) {
             messages.add(ValidationMessage.blocking("XC-PARAM-ENTITY", null, null, null,
                     "Parameter entityID is missing"));
+        } else if (!Lei.isValid(leiPart(entity))) {
+            messages.add(ValidationMessage.warning("XC-PARAM-LEI", null, null, null,
+                    "Parameter entityID does not carry a valid LEI (expected form: rs:<LEI>.CON): " + entity));
         }
         String period = parameters.value(Parameters.REF_PERIOD);
         if (!isDate(period)) {
@@ -61,10 +65,20 @@ public final class StructuralValidator {
                     "Parameter refPeriod is missing or not in YYYY-MM-DD format: " + period));
         }
         String currency = parameters.value(Parameters.BASE_CURRENCY);
-        if (currency != null && !CURRENCY.matcher(currency).matches()) {
+        if (currency == null || currency.isBlank()) {
+            messages.add(ValidationMessage.warning("XC-PARAM-CURRENCY", null, null, null,
+                    "Parameter baseCurrency is missing"));
+        } else if (!CURRENCY.matcher(currency).matches()) {
             messages.add(ValidationMessage.blocking("XC-PARAM-CURRENCY", null, null, null,
                     "Parameter baseCurrency is invalid (ISO 4217 code expected): " + currency));
         }
+    }
+
+    /** The identifier inside an entityID such as {@code rs:<LEI>.CON}: after the scheme, before the suffix. */
+    private static String leiPart(String entityId) {
+        String id = entityId.strip().substring(entityId.strip().indexOf(':') + 1);
+        int dot = id.indexOf('.');
+        return dot < 0 ? id : id.substring(0, dot);
     }
 
     private static boolean isDate(String value) {

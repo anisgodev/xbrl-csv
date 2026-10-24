@@ -1,9 +1,15 @@
-package eu.registredora.xbrlcsv;
+package tech.anisgodhbane.xbrlcsv;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** CSV writing and reading per RFC 4180 (comma separator, double quotes, CRLF line endings). */
+/**
+ * CSV writing and reading per RFC 4180 (comma separator, double quotes, CRLF line endings).
+ *
+ * <p>Writing is strict. Reading is lenient, to accept files from other tools: LF or CR line endings, a leading BOM,
+ * a quote inside an unquoted value ({@code ab"c"} reads as {@code abc}) and text after a closing quote
+ * ({@code "a"b} reads as {@code ab}); only an unclosed quote is an error.
+ */
 final class Csv {
 
     static final String LINE_ENDING = "\r\n";
@@ -107,7 +113,7 @@ final class Csv {
 
     private static int addValue(List<String> row, StringBuilder field, int values, int maxValues) {
         if (values >= maxValues) {
-            throw new IllegalArgumentException("Invalid CSV: too many values (more than " + maxValues + ")");
+            throw new TooManyValuesException(maxValues);
         }
         // Empty values share one instance: a file made of commas would otherwise cost one String per comma.
         row.add(field.isEmpty() ? "" : field.toString());
@@ -118,6 +124,13 @@ final class Csv {
     private static void addUnlessBlank(List<List<String>> rows, List<String> row, boolean quoted) {
         if (quoted || row.size() > 1 || !row.get(0).isEmpty()) {
             rows.add(row);
+        }
+    }
+
+    /** The content holds more values than the cap given to {@link #read(String, int)}. */
+    static final class TooManyValuesException extends IllegalArgumentException {
+        TooManyValuesException(int maxValues) {
+            super("Invalid CSV: too many values (more than " + maxValues + ")");
         }
     }
 }

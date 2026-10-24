@@ -1,4 +1,4 @@
-package eu.registredora.xbrlcsv;
+package tech.anisgodhbane.xbrlcsv;
 
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +17,7 @@ class StructuralValidatorTest {
 
     @Test
     void the_rule_list_covers_every_emitted_code() throws IOException {
-        String source = Files.readString(Path.of("src/main/java/eu/registredora/xbrlcsv/StructuralValidator.java"));
+        String source = Files.readString(Path.of("src/main/java/tech/anisgodhbane/xbrlcsv/StructuralValidator.java"));
         List<String> emitted = java.util.regex.Pattern.compile("(?:blocking|warning)\\(\"(XC-[A-Z-]+)\"").matcher(source)
                 .results().map(m -> m.group(1)).distinct().toList();
         assertThat(emitted).isNotEmpty();
@@ -77,7 +77,7 @@ class StructuralValidatorTest {
 
     @Test
     void rejects_an_impossible_reference_date() {
-        Parameters parameters = Parameters.registerOfInformation("rs:X.CON", LocalDate.of(2026, 12, 31), "EUR")
+        Parameters parameters = Parameters.registerOfInformation("rs:506700GE1G29325QX363.CON", LocalDate.of(2026, 12, 31), "EUR")
                 .with(Parameters.REF_PERIOD, "2026-13-45");
         ReportPackage reportPackage = ReportPackage.withDerivedFilingIndicators("p", "http://x", parameters, List.of());
 
@@ -148,8 +148,47 @@ class StructuralValidatorTest {
                 .containsExactlyElementsOf(declared);
     }
 
+    @Test
+    void warns_when_entity_id_does_not_carry_a_valid_lei() {
+        for (String entityId : List.of("rs:506700GE1G29325QX364.CON", "rs:X.CON", "ACME")) {
+            ReportPackage reportPackage = ReportPackage.withDerivedFilingIndicators("p", "http://x",
+                    validParameters().with(Parameters.ENTITY_ID, entityId), List.of());
+
+            assertThat(validator.validate(reportPackage)).as(entityId).singleElement()
+                    .satisfies(m -> {
+                        assertThat(m.code()).isEqualTo("XC-PARAM-LEI");
+                        assertThat(m.severity()).isEqualTo(ValidationMessage.Severity.WARNING);
+                    });
+        }
+    }
+
+    @Test
+    void accepts_an_entity_id_with_a_valid_lei_in_any_usual_form() {
+        for (String entityId : List.of("rs:506700GE1G29325QX363.CON", "lei:506700GE1G29325QX363",
+                "506700GE1G29325QX363", "rs:506700GE1G29325QX363.IND")) {
+            ReportPackage reportPackage = ReportPackage.withDerivedFilingIndicators("p", "http://x",
+                    validParameters().with(Parameters.ENTITY_ID, entityId), List.of());
+
+            assertThat(validator.validate(reportPackage)).as(entityId).isEmpty();
+        }
+    }
+
+    @Test
+    void warns_when_the_base_currency_is_missing() {
+        Map<String, String> values = new java.util.LinkedHashMap<>(validParameters().values());
+        values.remove(Parameters.BASE_CURRENCY);
+        ReportPackage reportPackage = ReportPackage.withDerivedFilingIndicators("p", "http://x",
+                new Parameters(values), List.of());
+
+        assertThat(validator.validate(reportPackage)).singleElement()
+                .satisfies(m -> {
+                    assertThat(m.code()).isEqualTo("XC-PARAM-CURRENCY");
+                    assertThat(m.severity()).isEqualTo(ValidationMessage.Severity.WARNING);
+                });
+    }
+
     private static Parameters validParameters() {
-        return Parameters.registerOfInformation("rs:X.CON", LocalDate.of(2026, 12, 31), "EUR");
+        return Parameters.registerOfInformation("rs:506700GE1G29325QX363.CON", LocalDate.of(2026, 12, 31), "EUR");
     }
 
     private static List<String> codes(List<ValidationMessage> messages) {

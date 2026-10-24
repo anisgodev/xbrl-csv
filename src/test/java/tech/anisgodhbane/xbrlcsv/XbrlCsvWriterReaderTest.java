@@ -1,4 +1,4 @@
-package eu.registredora.xbrlcsv;
+package tech.anisgodhbane.xbrlcsv;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -77,7 +77,7 @@ class XbrlCsvWriterReaderTest {
     void reads_back_empty_rows_of_a_single_column_table() {
         Table table = Table.builder("B_01.01", "c0010").row("").row("x").row("").build();
         ReportPackage original = ReportPackage.withDerivedFilingIndicators("p", "http://x",
-                Parameters.registerOfInformation("rs:X.CON", LocalDate.of(2026, 12, 31), "EUR"), List.of(table));
+                Parameters.registerOfInformation("rs:506700GE1G29325QX363.CON", LocalDate.of(2026, 12, 31), "EUR"), List.of(table));
 
         assertThat(reader.read(writer.write(original)).tables()).containsExactly(table);
     }
@@ -146,7 +146,7 @@ class XbrlCsvWriterReaderTest {
     @Test
     void reads_tables_back_in_filing_indicator_order() {
         ReportPackage original = ReportPackage.withDerivedFilingIndicators("p", "http://x",
-                Parameters.registerOfInformation("rs:X.CON", LocalDate.of(2026, 12, 31), "EUR"),
+                Parameters.registerOfInformation("rs:506700GE1G29325QX363.CON", LocalDate.of(2026, 12, 31), "EUR"),
                 List.of(Table.builder("B_05.01", "c0010").row("a").build(),
                         Table.builder("B_01.01", "c0010").row("b").build()));
 
@@ -210,7 +210,48 @@ class XbrlCsvWriterReaderTest {
         assertThat(new XbrlCsvReader(26).read(archive)).isEqualTo(ReportPackageFixtures.simplePackage());
         assertThatThrownBy(() -> strict.read(archive))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("too many values");
+                .hasMessageContaining("more than 20 in all");
+    }
+
+    @Test
+    void reads_back_a_lower_case_table_code_as_declared() {
+        Table table = Table.builder("b_01.01", "c0010").row("x").build();
+        ReportPackage original = ReportPackage.withDerivedFilingIndicators("p", "http://x",
+                ReportPackageFixtures.simplePackage().parameters(), List.of(table));
+
+        ReportPackage read = reader.read(writer.write(original));
+
+        assertThat(read).isEqualTo(original);
+        assertThat(new StructuralValidator().validate(read)).extracting(ValidationMessage::code)
+                .containsExactly("XC-TABLE-CODE");
+    }
+
+    @Test
+    void refuses_a_table_without_columns() {
+        Table table = new Table("B_01.01", List.of(), List.of(List.of(), List.of()));
+        ReportPackage reportPackage = ReportPackage.withDerivedFilingIndicators("p", "http://x",
+                ReportPackageFixtures.simplePackage().parameters(), List.of(table));
+
+        assertThatThrownBy(() -> writer.write(reportPackage))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("without columns");
+    }
+
+    @Test
+    void rejects_a_reports_folder_below_the_root_folder() throws Exception {
+        byte[] archive = zip(Map.of("a/b/reports/report.json", REPORT_JSON));
+        assertThatThrownBy(() -> reader.read(archive))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("directly in the root folder");
+    }
+
+    @Test
+    void rejects_a_parameter_named_twice() throws Exception {
+        byte[] archive = zip(Map.of("x/reports/report.json", REPORT_JSON,
+                "x/reports/parameters.csv", "name,value\r\nbaseCurrency,EUR\r\nbaseCurrency,USD\r\n"));
+        assertThatThrownBy(() -> reader.read(archive))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("baseCurrency appears twice");
     }
 
     @Test

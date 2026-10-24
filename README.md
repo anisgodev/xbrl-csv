@@ -120,8 +120,8 @@ it leaves open. The archive follows the xBRL Report Package 2023 and xBRL-CSV sp
 
 The writer refuses, with an `IllegalArgumentException`, a package name that is not a single folder name (empty, `.`,
 `..`, or containing `/` or `\`), a table code that does not give a plain file name (empty, `.`, `..`, containing `/` or
-`\`, or named like `parameters.csv` or `FilingIndicators.csv`) and two tables whose codes give the same file name
-(`B_01.01` and `b_01.01`). The other
+`\`, or named like `parameters.csv` or `FilingIndicators.csv`), a table without columns (it would vanish on reading)
+and two tables whose codes give the same file name (`B_01.01` and `b_01.01`). The other
 structural problems are reported by `StructuralValidator`, which should run before writing.
 
 ```java
@@ -141,13 +141,13 @@ year. A package written then read back is equal to the original. `read(InputStre
 - The package is located by its `reports/report.json`; the entry point comes from `documentInfo.extends`.
 - `parameters.csv` must have the header `name,value` and `FilingIndicators.csv` the header `templateID,reported`
   (case ignored), with exactly two values on every row.
-- Every other `.csv` in `reports/` becomes a `Table` whose code is derived from the file name; the first row is the
-  column header. Tables come in the order of the filing indicators, then the undeclared ones by file name.
+- Every other `.csv` in `reports/` becomes a `Table`; the first row is the column header. Its code is the one spelled
+  by the matching filing indicator (file names are compared in lower case), else the upper-cased file name. Tables come in the order of the filing indicators, then the undeclared ones by file name.
 - The package is held in memory while it is read, and the parsed values dominate: count about 50 bytes of heap per
   value, so up to about 250 MB at the default cap of 5 million values. A small archive can reach that cap, so size the
   heap for it, or set your own cap with `new XbrlCsvReader(maxValues)`.
-- Lenient on input: UTF-8 BOM and bare LF line endings accepted, blank lines ignored (a quoted empty value `""` on
-  its own line is kept as a row).
+- Lenient on input: UTF-8 BOM and bare LF or CR line endings accepted, blank lines ignored (a quoted empty value `""`
+  on its own line is kept as a row), stray quotes kept as text (`ab"c"` reads as `abc`, `"a"b` as `ab`).
 
 Malicious or broken archives are rejected with an `IllegalArgumentException`:
 
@@ -160,7 +160,9 @@ Malicious or broken archives are rejected with an `IllegalArgumentException`:
 | Two entries with the same path | `Invalid package: duplicate entry ...` |
 | `reports/report.json` missing | `Invalid package: reports/report.json missing` |
 | More than one `reports/report.json` | `Invalid package: several reports/report.json ...` |
-| More CSV values in all than the cap (5 million by default) | `Invalid CSV: too many values ...` |
+| `reports/` not directly in the root folder (`a/b/reports/report.json`) | `Invalid package: reports/ must sit directly in the root folder ...` |
+| More CSV values in all than the cap (5 million by default) | `Invalid package: too many CSV values (more than ... in all)` |
+| A parameter named twice in `parameters.csv` | `Invalid package: parameter ... appears twice ...` |
 | `parameters.csv` or `FilingIndicators.csv` with another header, or a row without exactly two values | `Invalid package: parameters.csv ...` |
 | `reported` other than `true` or `false` in `FilingIndicators.csv` | `Invalid package: reported must be true or false ...` |
 | `report.json` unreadable or without `documentInfo.extends` | `Invalid package: ...` |
@@ -189,8 +191,9 @@ messages.forEach(m -> System.out.printf("%s %s %s row %s: %s%n",
 | `XC-PACKAGE-NAME` | blocking | Package name limited to letters, digits, `.`, `-` and `_` |
 | `XC-ENTRY-POINT` | blocking | Taxonomy entry point not empty |
 | `XC-PARAM-ENTITY` | blocking | `entityID` parameter present |
+| `XC-PARAM-LEI` | warning | `entityID` carries a valid LEI (`rs:<LEI>.CON`, `lei:<LEI>` or the bare LEI), see `Lei` |
 | `XC-PARAM-PERIOD` | blocking | `refPeriod` parameter present, a real date in `YYYY-MM-DD` format |
-| `XC-PARAM-CURRENCY` | blocking | `baseCurrency`, if supplied, is an ISO 4217 code (`EUR` or `iso4217:EUR`) |
+| `XC-PARAM-CURRENCY` | blocking | `baseCurrency`, if supplied, is an ISO 4217 code (`EUR` or `iso4217:EUR`); warning if missing |
 | `XC-INDICATOR-DUPLICATE` | blocking | No two filing indicators for the same template |
 | `XC-TABLE-DUPLICATE` | blocking | No two tables with the same code |
 | `XC-TABLE-UNDECLARED` | blocking | Every table present is declared in `FilingIndicators.csv` with `reported = true` |

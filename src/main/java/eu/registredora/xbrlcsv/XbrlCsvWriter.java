@@ -33,7 +33,7 @@ import java.util.zip.ZipOutputStream;
  *
  * <p>Refuses, with an {@link IllegalArgumentException}, a package name that is not a single folder name, a table code
  * that does not give a plain file name (path separators, {@code .}, {@code ..}, or the name of {@code parameters.csv}
- * or {@code FilingIndicators.csv}) and tables whose codes give the same file name.
+ * or {@code FilingIndicators.csv}), a table without columns and tables whose codes give the same file name.
  *
  * <p>{@link #write(ReportPackage, OutputStream)} leaves the caller's stream open.
  */
@@ -85,6 +85,10 @@ public final class XbrlCsvWriter {
         Set<String> fileNames = new HashSet<>();
         for (Table table : reportPackage.tables()) {
             checkTableCode(table);
+            if (table.columns().isEmpty()) {
+                // Its header and rows would be blank lines, which reading ignores: the table would vanish.
+                throw new IllegalArgumentException("Table without columns, it cannot be written: " + table.code());
+            }
             if (!fileNames.add(table.fileName())) {
                 throw new IllegalArgumentException("Two tables would be written to the same file: " + table.fileName());
             }

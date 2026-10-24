@@ -29,6 +29,11 @@ class CsvTest {
     }
 
     @Test
+    void reads_stray_quotes_leniently() {
+        assertThat(Csv.read("h\r\nab\"c\",\"a\"b\r\n")).containsExactly(List.of("h"), List.of("abc", "ab"));
+    }
+
+    @Test
     void quotes_a_row_made_of_a_single_empty_value() {
         assertThat(Csv.write(List.of("a"), List.of(List.of(""), List.of("x")))).isEqualTo("a\r\n\"\"\r\nx\r\n");
     }

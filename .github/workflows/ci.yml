@@ -17,5 +17,3 @@ jobs:
           cache: maven
       - name: Build and test
         run: mvn -B verify
-      - name: Sync script
-        run: bash -n scripts/sync.sh

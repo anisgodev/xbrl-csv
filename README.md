@@ -208,8 +208,7 @@ mvn verify      # compiles and runs the tests
 mvn install     # installs tech.anisgodhbane:xbrl-csv:0.1.0-SNAPSHOT in the local Maven repository
 ```
 
-CI (GitHub Actions, Java 21 Temurin) runs `mvn -B verify` and checks the sync script's syntax on every push to
-`main` and on every pull request.
+CI (GitHub Actions, Java 21 Temurin) runs `mvn -B verify` on every push to `main` and on every pull request.
 
 ## Release
 
@@ -237,23 +236,11 @@ then run `mvn -Prelease -Dgpg.signer=gpg deploy`.
 
 ## Where this code comes from
 
-The library is developed in the platform repository, `anisgodev/Registre_information`, module
-`registre-dora/xbrl-csv`, which remains the source. This repository is a standalone copy of it: same git history
-(extracted with `git subtree split`), same code, and a `pom.xml` without a parent. The source commit of the last sync
-is recorded in `PLATFORM-SOURCE`.
-
-| Case | Command (from this repository) |
-|---|---|
-| After a change to `xbrl-csv` in the platform | `scripts/sync.sh <path to Registre_information>`, then `mvn verify` and commit `src/`, `pom.xml`, `PLATFORM-SOURCE` |
-| Check whether this repository is up to date | `scripts/sync.sh --check <path to Registre_information>` |
-| Change made here first | `scripts/sync.sh --to-platform <path to Registre_information>` copies `src/` into the platform (a change to the `pom.xml` dependencies is reported, to be applied by hand); commit there, then sync normally here |
-
-The only allowed difference between the two is the `pom.xml`: the script replaces the `registre-dora` parent with the
-version, Java properties and plugin versions read from the platform's parent pom, and keeps this repository's `<url>`
-and `<licenses>`.
-
-The sandbox (`anisgodev/registre-bac-a-sable`) keeps its own copy, synced from the platform by its
-`scripts/synchroniser-moteur.sh`.
+This repository is the source of the library. It was first developed in the platform repository,
+`anisgodev/Registre_information` (module `registre-dora/xbrl-csv`, history kept here with `git subtree split`); the
+platform and the sandbox (`anisgodev/registre-bac-a-sable`) now use the version published on Maven Central. To ship a
+change to them, release a new version here, then bump the `xbrl-csv.version` property in the platform's
+`registre-dora/pom.xml` (the sandbox aligns on it with its `scripts/synchroniser-moteur.sh`).
 
 ## Support the project
 

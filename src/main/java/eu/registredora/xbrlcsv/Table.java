@@ -1,6 +1,7 @@
 package eu.registredora.xbrlcsv;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -55,7 +56,7 @@ public record Table(String code, List<String> columns, List<List<String>> rows) 
         }
 
         public Builder row(String... values) {
-            rows.add(new ArrayList<>(List.of(values)));
+            rows.add(new ArrayList<>(Arrays.asList(values)));
             return this;
         }
 

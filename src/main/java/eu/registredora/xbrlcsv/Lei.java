@@ -1,5 +1,6 @@
 package eu.registredora.xbrlcsv;
 
+import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
@@ -19,7 +20,7 @@ public record Lei(String value) {
     }
 
     public static Lei of(String value) {
-        return new Lei(value == null ? null : value.strip().toUpperCase());
+        return new Lei(value == null ? null : value.strip().toUpperCase(Locale.ROOT));
     }
 
     /** True if the string has the format of a LEI and correct check digits. */

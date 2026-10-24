@@ -9,9 +9,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.attribute.FileTime;
-import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -27,14 +28,18 @@ import java.util.zip.ZipOutputStream;
  * </pre>
  *
  * <p>Files are UTF-8 without BOM. Entry order and timestamps are fixed: the same package always produces the same
- * bytes, hence the same hash.
+ * bytes, hence the same hash, whatever the machine or its time zone.
+ *
+ * <p>Refuses, with an {@link IllegalArgumentException}, a package name that is not a single folder name and tables
+ * whose codes give the same file name.
  */
 public final class XbrlCsvWriter {
 
     public static final String PACKAGE_DOCUMENT_TYPE = "https://xbrl.org/report-package/2023";
     public static final String REPORT_DOCUMENT_TYPE = "https://xbrl.org/2021/xbrl-csv";
 
-    private static final FileTime FIXED_TIME = FileTime.from(Instant.parse("2000-01-01T00:00:00Z"));
+    /** Written as a plain DOS timestamp, which carries no time zone, so the bytes do not depend on the JVM's. */
+    private static final LocalDateTime FIXED_TIME = LocalDateTime.of(2000, 1, 1, 0, 0);
 
     private final ObjectMapper json = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 
@@ -45,6 +50,7 @@ public final class XbrlCsvWriter {
     }
 
     public void write(ReportPackage reportPackage, OutputStream out) {
+        checkWritable(reportPackage);
         String root = reportPackage.name() + "/";
         try (ZipOutputStream zip = new ZipOutputStream(out, StandardCharsets.UTF_8)) {
             add(zip, root + "META-INF/reportPackage.json", reportPackageJson());
@@ -67,6 +73,19 @@ public final class XbrlCsvWriter {
         }
     }
 
+    private static void checkWritable(ReportPackage reportPackage) {
+        String name = reportPackage.name();
+        if (name.isEmpty() || name.equals(".") || name.equals("..") || name.contains("/") || name.contains("\\")) {
+            throw new IllegalArgumentException("Invalid package name, a single folder name is expected: " + name);
+        }
+        Set<String> fileNames = new HashSet<>();
+        for (Table table : reportPackage.tables()) {
+            if (!fileNames.add(table.fileName())) {
+                throw new IllegalArgumentException("Two tables would be written to the same file: " + table.fileName());
+            }
+        }
+    }
+
     private String reportPackageJson() throws IOException {
         ObjectNode root = json.createObjectNode();
         root.putObject("documentInfo").put("documentType", PACKAGE_DOCUMENT_TYPE);
@@ -83,7 +102,7 @@ public final class XbrlCsvWriter {
 
     private static void add(ZipOutputStream zip, String path, String content) throws IOException {
         ZipEntry entry = new ZipEntry(path);
-        entry.setLastModifiedTime(FIXED_TIME);
+        entry.setTimeLocal(FIXED_TIME);
         zip.putNextEntry(entry);
         zip.write(content.getBytes(StandardCharsets.UTF_8));
         zip.closeEntry();

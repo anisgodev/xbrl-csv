@@ -1,14 +1,17 @@
 package eu.registredora.xbrlcsv;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
  * Structural checks on a package, independent of the taxonomy: what would get a package rejected before its content
- * is even read. The EBA taxonomy rules are checked elsewhere (Arelle, see ADR-0003).
+ * is even read. The EBA taxonomy rules are not checked here; run them with a taxonomy-aware processor such as Arelle.
  */
 public final class StructuralValidator {
 
@@ -53,7 +56,7 @@ public final class StructuralValidator {
                     "Parameter entityID is missing"));
         }
         String period = parameters.value(Parameters.REF_PERIOD);
-        if (period == null || !DATE.matcher(period).matches()) {
+        if (!isDate(period)) {
             messages.add(ValidationMessage.blocking("XC-PARAM-PERIOD", null, null, null,
                     "Parameter refPeriod is missing or not in YYYY-MM-DD format: " + period));
         }
@@ -64,8 +67,20 @@ public final class StructuralValidator {
         }
     }
 
+    private static boolean isDate(String value) {
+        if (value == null || !DATE.matcher(value).matches()) {
+            return false;
+        }
+        try {
+            LocalDate.parse(value);
+            return true;
+        } catch (DateTimeParseException e) {
+            return false;
+        }
+    }
+
     private static void validateFilingIndicators(ReportPackage reportPackage, List<ValidationMessage> messages) {
-        Set<String> reported = new HashSet<>();
+        Set<String> reported = new LinkedHashSet<>();
         Set<String> seen = new HashSet<>();
         for (FilingIndicator indicator : reportPackage.filingIndicators()) {
             if (!seen.add(indicator.templateId())) {
@@ -84,7 +99,9 @@ public final class StructuralValidator {
             }
             if (!reported.contains(table.code())) {
                 messages.add(ValidationMessage.blocking("XC-TABLE-UNDECLARED", table.code(), null, null,
-                        "Table present but not declared in FilingIndicators.csv"));
+                        seen.contains(table.code())
+                                ? "Table present but declared with reported = false in FilingIndicators.csv"
+                                : "Table present but not declared in FilingIndicators.csv"));
             }
         }
         for (String templateId : reported) {

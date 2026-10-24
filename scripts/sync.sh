@@ -8,7 +8,8 @@
 #
 # Only adaptation: the pom. The platform's pom inherits from registre-dora; here the parent is replaced by the
 # version, Java properties and plugin versions read from the platform's parent pom, so that `mvn verify` works
-# on its own, and the <url> and <licenses> of this repository's pom are kept.
+# on its own. This repository's groupId (Maven Central namespace), publishing metadata (<url> to <scm>) and
+# <profiles> (Central release) are kept.
 set -euo pipefail
 
 mode=copy
@@ -46,8 +47,12 @@ PARENT="$parent" perl -0pi -e '
 ' "$copy/pom.xml"
 HERE_POM="$here/pom.xml" perl -0pi -e '
   local $/; open my $p, "<", $ENV{HERE_POM} or die; my $here = <$p>;
-  my ($meta) = $here =~ m{(    <url>.*?</licenses>\n)}s;
+  my ($group) = $here =~ m{</modelVersion>\s*<groupId>([^<]+)</groupId>};
+  my ($meta) = $here =~ m{(    <url>.*</(?:scm|developers|licenses)>\n)}s;
+  my ($profiles) = $here =~ m{(\n+    <profiles>.*?</profiles>\n)}s;
+  s{(</modelVersion>\s*<groupId>)[^<]+}{$1$group} if defined $group;
   s{(</description>\n)}{$1$meta}s if defined $meta && !m{<licenses>};
+  s{\n</project>}{$profiles</project>}s if defined $profiles && !m{<profiles>};
 ' "$copy/pom.xml"
 
 commit="$(git -C "$source_repo" rev-parse HEAD)"

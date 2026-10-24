@@ -17,9 +17,10 @@ public final class StructuralValidator {
 
     /** Codes of the rules applied, to report how many rules a check has verified. */
     public static final List<String> RULES = List.of(
-            "XC-PACKAGE-NAME", "XC-ENTRY-POINT", "XC-PARAM-ENTITY", "XC-PARAM-LEI", "XC-PARAM-PERIOD", "XC-PARAM-CURRENCY",
-            "XC-INDICATOR-DUPLICATE", "XC-TABLE-DUPLICATE", "XC-TABLE-UNDECLARED", "XC-TABLE-MISSING", "XC-TABLE-CODE",
-            "XC-TABLE-COLUMNS", "XC-COLUMN-EMPTY", "XC-COLUMN-DUPLICATE", "XC-ROW-WIDTH", "XC-ROW-EMPTY");
+            "XC-PACKAGE-NAME", "XC-ENTRY-POINT", "XC-PARAM-ENTITY", "XC-PARAM-LEI", "XC-PARAM-PERIOD",
+            "XC-PARAM-CURRENCY", "XC-INDICATOR-DUPLICATE", "XC-TABLE-DUPLICATE", "XC-TABLE-UNDECLARED",
+            "XC-TABLE-MISSING", "XC-TABLE-CODE", "XC-TABLE-COLUMNS", "XC-COLUMN-EMPTY", "XC-COLUMN-DUPLICATE",
+            "XC-ROW-WIDTH", "XC-ROW-EMPTY");
 
     private static final Pattern PACKAGE_NAME = Pattern.compile("[A-Za-z0-9._-]+");
     private static final Pattern TABLE_CODE = Pattern.compile("[A-Z]_[0-9]{2}\\.[0-9]{2}");

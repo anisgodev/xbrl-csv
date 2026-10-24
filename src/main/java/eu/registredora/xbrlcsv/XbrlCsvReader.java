@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -20,7 +21,7 @@ import java.util.zip.ZipInputStream;
  * Reads back an xBRL-CSV report package archive, for example a client's filing from the previous year.
  *
  * <p>Guards against malicious archives: uncompressed size and number of entries are capped, paths climbing out of
- * the tree are rejected.
+ * the tree, duplicate entries and several reports in one archive are rejected.
  */
 public final class XbrlCsvReader {
 
@@ -36,10 +37,16 @@ public final class XbrlCsvReader {
     public ReportPackage read(InputStream archive) {
         Map<String, String> files = unzip(archive);
 
-        String reportPath = files.keySet().stream()
+        List<String> reportPaths = files.keySet().stream()
                 .filter(p -> p.endsWith("/reports/report.json"))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Invalid package: reports/report.json missing"));
+                .toList();
+        if (reportPaths.isEmpty()) {
+            throw new IllegalArgumentException("Invalid package: reports/report.json missing");
+        }
+        if (reportPaths.size() > 1) {
+            throw new IllegalArgumentException("Invalid package: several reports/report.json " + reportPaths);
+        }
+        String reportPath = reportPaths.get(0);
         String prefix = reportPath.substring(0, reportPath.length() - "report.json".length());
         String name = reportPath.substring(0, reportPath.indexOf('/'));
 
@@ -97,11 +104,22 @@ public final class XbrlCsvReader {
             List<List<String>> rows = Csv.read(content);
             for (List<String> row : rows.subList(Math.min(1, rows.size()), rows.size())) {
                 if (row.size() >= 2) {
-                    filingIndicators.add(new FilingIndicator(row.get(0), Boolean.parseBoolean(row.get(1).strip())));
+                    filingIndicators.add(new FilingIndicator(row.get(0), parseReported(row.get(1).strip())));
                 }
             }
         }
         return filingIndicators;
+    }
+
+    private static boolean parseReported(String value) {
+        if (value.equalsIgnoreCase("true")) {
+            return true;
+        }
+        if (value.equalsIgnoreCase("false")) {
+            return false;
+        }
+        throw new IllegalArgumentException("Invalid package: reported must be true or false in FilingIndicators.csv: "
+                + value);
     }
 
     private static Map<String, String> unzip(InputStream archive) {
@@ -122,7 +140,7 @@ public final class XbrlCsvReader {
                 if (entry.isDirectory()) {
                     continue;
                 }
-                java.io.ByteArrayOutputStream content = new java.io.ByteArrayOutputStream();
+                ByteArrayOutputStream content = new ByteArrayOutputStream();
                 int read;
                 while ((read = zip.read(buffer)) > 0) {
                     total += read;
@@ -131,7 +149,9 @@ public final class XbrlCsvReader {
                     }
                     content.write(buffer, 0, read);
                 }
-                files.put(path, content.toString(StandardCharsets.UTF_8));
+                if (files.put(path, content.toString(StandardCharsets.UTF_8)) != null) {
+                    throw new IllegalArgumentException("Invalid package: duplicate entry " + path);
+                }
             }
         } catch (IOException e) {
             throw new UncheckedIOException("Unable to read the xBRL-CSV package", e);

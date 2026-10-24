@@ -29,6 +29,17 @@ class CsvTest {
     }
 
     @Test
+    void quotes_a_row_made_of_a_single_empty_value() {
+        assertThat(Csv.write(List.of("a"), List.of(List.of(""), List.of("x")))).isEqualTo("a\r\n\"\"\r\nx\r\n");
+    }
+
+    @Test
+    void keeps_a_quoted_empty_row_and_ignores_blank_lines() {
+        assertThat(Csv.read("a\r\n\"\"\r\n\r\nx\r\n\r\n\"\"\r\n\r\n"))
+                .containsExactly(List.of("a"), List.of(""), List.of("x"), List.of(""));
+    }
+
+    @Test
     void rejects_an_unclosed_quote() {
         assertThatThrownBy(() -> Csv.read("a\n\"x")).isInstanceOf(IllegalArgumentException.class);
     }

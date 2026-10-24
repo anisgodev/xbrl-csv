@@ -21,6 +21,11 @@ final class Csv {
     }
 
     private static void writeRow(StringBuilder sb, List<String> values) {
+        if (values.size() == 1 && (values.get(0) == null || values.get(0).isEmpty())) {
+            // A lone empty value is quoted, otherwise the row would be a blank line, which reading ignores.
+            sb.append("\"\"").append(LINE_ENDING);
+            return;
+        }
         for (int i = 0; i < values.size(); i++) {
             if (i > 0) {
                 sb.append(',');
@@ -39,12 +44,16 @@ final class Csv {
         return needsQuoting ? '"' + value.replace("\"", "\"\"") + '"' : value;
     }
 
-    /** Reads a complete CSV content; the first row is the header. Trailing empty lines are ignored. */
+    /**
+     * Reads a complete CSV content; the first row is the header. Blank lines are ignored; a row made of a single
+     * quoted empty value ({@code ""}) is kept.
+     */
     static List<List<String>> read(String content) {
         List<List<String>> rows = new ArrayList<>();
         List<String> row = new ArrayList<>();
         StringBuilder field = new StringBuilder();
         boolean inQuotes = false;
+        boolean rowQuoted = false;
         int i = 0;
         if (content.startsWith("﻿")) {
             i = 1;
@@ -64,14 +73,16 @@ final class Csv {
                 }
             } else if (c == '"') {
                 inQuotes = true;
+                rowQuoted = true;
             } else if (c == ',') {
                 row.add(field.toString());
                 field.setLength(0);
             } else if (c == '\r' || c == '\n') {
                 row.add(field.toString());
                 field.setLength(0);
-                rows.add(row);
+                addUnlessBlank(rows, row, rowQuoted);
                 row = new ArrayList<>();
+                rowQuoted = false;
                 if (c == '\r' && i + 1 < content.length() && content.charAt(i + 1) == '\n') {
                     i++;
                 }
@@ -83,11 +94,16 @@ final class Csv {
         if (inQuotes) {
             throw new IllegalArgumentException("Invalid CSV: unclosed quote");
         }
-        if (field.length() > 0 || !row.isEmpty()) {
+        if (field.length() > 0 || !row.isEmpty() || rowQuoted) {
             row.add(field.toString());
+            addUnlessBlank(rows, row, rowQuoted);
+        }
+        return rows;
+    }
+
+    private static void addUnlessBlank(List<List<String>> rows, List<String> row, boolean quoted) {
+        if (quoted || row.size() > 1 || !row.get(0).isEmpty()) {
             rows.add(row);
         }
-        rows.removeIf(r -> r.size() == 1 && r.get(0).isEmpty());
-        return rows;
     }
 }

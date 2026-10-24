@@ -114,8 +114,13 @@ archive follows the xBRL Report Package 2023 and xBRL-CSV specifications:
 - RFC 4180 CSV: comma separator, CRLF line endings, double quotes around values containing a comma, a quote or a
   line break (`Cloud, "Nimbus" SA` becomes `"Cloud, ""Nimbus"" SA"`).
 - UTF-8 files without BOM.
+- RFC 4180 CSV: a row made of a single empty value is written `""`, so it is not mistaken for a blank line.
 - Deterministic output: fixed entry order and timestamps, so the same package always produces the same bytes and the
-  same hash, which lets you compare two runs or prove what was filed.
+  same hash on any machine and in any time zone, which lets you compare two runs or prove what was filed.
+
+The writer refuses, with an `IllegalArgumentException`, a package name that is not a single folder name (empty, `.`,
+`..`, or containing `/` or `\`) and two tables whose codes give the same file name (`B_01.01` and `b_01.01`). The other
+structural problems are reported by `StructuralValidator`, which should run before writing.
 
 ```java
 byte[] zip = new XbrlCsvWriter().write(reportPackage);
@@ -134,7 +139,8 @@ year. A package written then read back gives the same name, entry point, paramet
 - The package is located by its `reports/report.json`; the entry point comes from `documentInfo.extends`.
 - Every other `.csv` in `reports/` becomes a `Table` whose code is derived from the file name; the first row is the
   column header.
-- Lenient on input: UTF-8 BOM and bare LF line endings accepted, trailing empty lines ignored.
+- Lenient on input: UTF-8 BOM and bare LF line endings accepted, blank lines ignored (a quoted empty value `""` on
+  its own line is kept as a row).
 
 Malicious or broken archives are rejected with an `IllegalArgumentException`:
 
@@ -144,7 +150,10 @@ Malicious or broken archives are rejected with an `IllegalArgumentException`:
 | More than 500 entries | `Invalid package: too many entries` |
 | More than 200 MB uncompressed | `Invalid package: uncompressed size too large` |
 | Not a ZIP, or empty ZIP | `Invalid package: empty or non-ZIP archive` |
+| Two entries with the same path | `Invalid package: duplicate entry ...` |
 | `reports/report.json` missing | `Invalid package: reports/report.json missing` |
+| More than one `reports/report.json` | `Invalid package: several reports/report.json ...` |
+| `reported` other than `true` or `false` in `FilingIndicators.csv` | `Invalid package: reported must be true or false ...` |
 | `report.json` unreadable or without `documentInfo.extends` | `Invalid package: ...` |
 | Unclosed quote in a CSV | `Invalid CSV: unclosed quote` |
 
@@ -171,11 +180,11 @@ messages.forEach(m -> System.out.printf("%s %s %s row %s: %s%n",
 | `XC-PACKAGE-NAME` | blocking | Package name limited to letters, digits, `.`, `-` and `_` |
 | `XC-ENTRY-POINT` | blocking | Taxonomy entry point not empty |
 | `XC-PARAM-ENTITY` | blocking | `entityID` parameter present |
-| `XC-PARAM-PERIOD` | blocking | `refPeriod` parameter present, in `YYYY-MM-DD` format |
+| `XC-PARAM-PERIOD` | blocking | `refPeriod` parameter present, a real date in `YYYY-MM-DD` format |
 | `XC-PARAM-CURRENCY` | blocking | `baseCurrency`, if supplied, is an ISO 4217 code (`EUR` or `iso4217:EUR`) |
 | `XC-INDICATOR-DUPLICATE` | blocking | No two filing indicators for the same template |
 | `XC-TABLE-DUPLICATE` | blocking | No two tables with the same code |
-| `XC-TABLE-UNDECLARED` | blocking | Every table present is declared in `FilingIndicators.csv` |
+| `XC-TABLE-UNDECLARED` | blocking | Every table present is declared in `FilingIndicators.csv` with `reported = true` |
 | `XC-TABLE-MISSING` | blocking | Every declared template is present in the package |
 | `XC-TABLE-CODE` | blocking | Table code of the form `B_01.01` |
 | `XC-TABLE-COLUMNS` | blocking | The table has at least one column |
@@ -183,6 +192,8 @@ messages.forEach(m -> System.out.printf("%s %s %s row %s: %s%n",
 | `XC-COLUMN-DUPLICATE` | blocking | No two columns with the same code |
 | `XC-ROW-WIDTH` | blocking | Every row has as many values as there are columns |
 | `XC-ROW-EMPTY` | warning | Entirely empty row |
+
+Messages come in a stable order: package, parameters, filing indicators, then each table in the order supplied.
 
 The list of codes is exposed by `StructuralValidator.RULES`, for example to report how many rules a check has
 verified; a test guarantees it covers every code emitted.
@@ -199,16 +210,18 @@ Lei.of("506700GE1G29325QX364");            // IllegalArgumentException
 Lei.checkDigits("506700GE1G29325QX3");     // "63"
 ```
 
-`Lei.of` normalises before validating; the constructor `new Lei(...)` requires an already normalised value.
+`Lei.of` normalises before validating, whatever the default locale; the constructor `new Lei(...)` requires an already normalised value.
 
 ## Build
 
 ```bash
-mvn verify      # compiles and runs the tests
+mvn verify      # compiles, runs the tests and writes the coverage report to target/site/jacoco/index.html
 mvn install     # installs tech.anisgodhbane:xbrl-csv:0.1.0-SNAPSHOT in the local Maven repository
 ```
 
-CI (GitHub Actions, Java 21 Temurin) runs `mvn -B verify` on every push to `main` and on every pull request.
+CI (GitHub Actions, Temurin Java 21 and 25) runs `mvn -B verify` on every push to `main` and on every pull request.
+The jar declares the module name `eu.registredora.xbrlcsv` (`Automatic-Module-Name`). Changes are listed in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Release
 
@@ -245,8 +258,8 @@ change to them, release a new version here, then bump the `xbrl-csv.version` pro
 ## Support the project
 
 xBRL-CSV is free and open source. If it saves you time, you can support its development through
-[GitHub Sponsors](https://github.com/sponsors/anisgodev) (the "Sponsor" button at the top of the repository). Companies
-that rely on it for their DORA filings are especially welcome to sponsor.
+[Liberapay](https://liberapay.com/anisgodev) (the "Sponsor" button at the top of the repository). Companies that rely
+on it for their DORA filings are especially welcome to contribute.
 
 ## License
 

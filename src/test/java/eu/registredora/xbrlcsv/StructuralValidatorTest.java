@@ -75,6 +75,79 @@ class StructuralValidatorTest {
                 });
     }
 
+    @Test
+    void rejects_an_impossible_reference_date() {
+        Parameters parameters = Parameters.registerOfInformation("rs:X.CON", LocalDate.of(2026, 12, 31), "EUR")
+                .with(Parameters.REF_PERIOD, "2026-13-45");
+        ReportPackage reportPackage = ReportPackage.withDerivedFilingIndicators("p", "http://x", parameters, List.of());
+
+        assertThat(codes(validator.validate(reportPackage))).containsExactly("XC-PARAM-PERIOD");
+    }
+
+    @Test
+    void accepts_a_prefixed_currency_and_rejects_a_lower_case_one() {
+        ReportPackage prefixed = ReportPackage.withDerivedFilingIndicators("p", "http://x",
+                validParameters().with(Parameters.BASE_CURRENCY, "iso4217:EUR"), List.of());
+        ReportPackage lowerCase = ReportPackage.withDerivedFilingIndicators("p", "http://x",
+                validParameters().with(Parameters.BASE_CURRENCY, "eur"), List.of());
+
+        assertThat(validator.validate(prefixed)).isEmpty();
+        assertThat(codes(validator.validate(lowerCase))).containsExactly("XC-PARAM-CURRENCY");
+    }
+
+    @Test
+    void detects_a_blank_entry_point() {
+        ReportPackage reportPackage = ReportPackage.withDerivedFilingIndicators("p", " ", validParameters(), List.of());
+
+        assertThat(codes(validator.validate(reportPackage))).containsExactly("XC-ENTRY-POINT");
+    }
+
+    @Test
+    void detects_duplicate_indicators_and_tables() {
+        Table table = Table.builder("B_01.01", "c0010").row("x").build();
+        ReportPackage reportPackage = new ReportPackage("p", "http://x", validParameters(),
+                List.of(new FilingIndicator("B_01.01", true), new FilingIndicator("B_01.01", true)),
+                List.of(table, table));
+
+        assertThat(codes(validator.validate(reportPackage)))
+                .containsExactlyInAnyOrder("XC-INDICATOR-DUPLICATE", "XC-TABLE-DUPLICATE");
+    }
+
+    @Test
+    void detects_a_malformed_code_and_tables_without_usable_columns() {
+        Table badCode = Table.builder("B-01-01", "c0010").row("x").build();
+        Table noColumns = Table.builder("B_02.01").build();
+        Table blankColumn = Table.builder("B_03.01", "c0010", " ").row("x", "y").build();
+        ReportPackage reportPackage = ReportPackage.withDerivedFilingIndicators("p", "http://x", validParameters(),
+                List.of(badCode, noColumns, blankColumn));
+
+        assertThat(codes(validator.validate(reportPackage)))
+                .containsExactlyInAnyOrder("XC-TABLE-CODE", "XC-TABLE-COLUMNS", "XC-COLUMN-EMPTY");
+    }
+
+    @Test
+    void says_when_a_present_table_is_declared_as_not_reported() {
+        Table table = Table.builder("B_01.01", "c0010").row("x").build();
+        ReportPackage reportPackage = new ReportPackage("p", "http://x", validParameters(),
+                List.of(new FilingIndicator("B_01.01", false)), List.of(table));
+
+        assertThat(validator.validate(reportPackage)).singleElement()
+                .satisfies(m -> {
+                    assertThat(m.code()).isEqualTo("XC-TABLE-UNDECLARED");
+                    assertThat(m.text()).contains("reported = false");
+                });
+    }
+
+    @Test
+    void reports_missing_tables_in_declaration_order() {
+        List<String> declared = List.of("B_09.01", "B_01.01", "B_05.02", "B_02.03", "B_07.01", "B_03.02");
+        ReportPackage reportPackage = new ReportPackage("p", "http://x", validParameters(),
+                declared.stream().map(t -> new FilingIndicator(t, true)).toList(), List.of());
+
+        assertThat(validator.validate(reportPackage)).extracting(ValidationMessage::table)
+                .containsExactlyElementsOf(declared);
+    }
+
     private static Parameters validParameters() {
         return Parameters.registerOfInformation("rs:X.CON", LocalDate.of(2026, 12, 31), "EUR");
     }

@@ -49,13 +49,19 @@ final class Csv {
      * quoted empty value ({@code ""}) is kept.
      */
     static List<List<String>> read(String content) {
+        return read(content, Integer.MAX_VALUE);
+    }
+
+    /** As {@link #read(String)}, refusing content with more than {@code maxValues} values in all. */
+    static List<List<String>> read(String content, int maxValues) {
         List<List<String>> rows = new ArrayList<>();
         List<String> row = new ArrayList<>();
         StringBuilder field = new StringBuilder();
         boolean inQuotes = false;
         boolean rowQuoted = false;
+        int values = 0;
         int i = 0;
-        if (content.startsWith("﻿")) {
+        if (content.startsWith("\uFEFF")) {
             i = 1;
         }
         while (i < content.length()) {
@@ -75,11 +81,9 @@ final class Csv {
                 inQuotes = true;
                 rowQuoted = true;
             } else if (c == ',') {
-                row.add(field.toString());
-                field.setLength(0);
+                values = addValue(row, field, values, maxValues);
             } else if (c == '\r' || c == '\n') {
-                row.add(field.toString());
-                field.setLength(0);
+                values = addValue(row, field, values, maxValues);
                 addUnlessBlank(rows, row, rowQuoted);
                 row = new ArrayList<>();
                 rowQuoted = false;
@@ -95,10 +99,20 @@ final class Csv {
             throw new IllegalArgumentException("Invalid CSV: unclosed quote");
         }
         if (field.length() > 0 || !row.isEmpty() || rowQuoted) {
-            row.add(field.toString());
+            addValue(row, field, values, maxValues);
             addUnlessBlank(rows, row, rowQuoted);
         }
         return rows;
+    }
+
+    private static int addValue(List<String> row, StringBuilder field, int values, int maxValues) {
+        if (values >= maxValues) {
+            throw new IllegalArgumentException("Invalid CSV: too many values (more than " + maxValues + ")");
+        }
+        // Empty values share one instance: a file made of commas would otherwise cost one String per comma.
+        row.add(field.isEmpty() ? "" : field.toString());
+        field.setLength(0);
+        return values + 1;
     }
 
     private static void addUnlessBlank(List<List<String>> rows, List<String> row, boolean quoted) {

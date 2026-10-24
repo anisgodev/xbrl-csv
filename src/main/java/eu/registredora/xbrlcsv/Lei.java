@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 public record Lei(String value) {
 
     private static final Pattern FORMAT = Pattern.compile("[0-9A-Z]{18}[0-9]{2}");
+    private static final Pattern PREFIX = Pattern.compile("[0-9A-Z]{18}");
 
     public Lei {
         Objects.requireNonNull(value, "value");
@@ -19,6 +20,7 @@ public record Lei(String value) {
         }
     }
 
+    /** Builds a LEI after stripping surrounding spaces and upper-casing; refuses an invalid one. */
     public static Lei of(String value) {
         return new Lei(value == null ? null : value.strip().toUpperCase(Locale.ROOT));
     }
@@ -33,7 +35,7 @@ public record Lei(String value) {
 
     /** Computes the two check digits for an 18-character prefix. */
     public static String checkDigits(String prefix18) {
-        if (prefix18 == null || !prefix18.matches("[0-9A-Z]{18}")) {
+        if (prefix18 == null || !PREFIX.matcher(prefix18).matches()) {
             throw new IllegalArgumentException("The prefix must contain 18 uppercase alphanumeric characters");
         }
         int check = 98 - mod97(prefix18 + "00");

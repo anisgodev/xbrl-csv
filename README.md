@@ -73,7 +73,7 @@ Table.codeFromFileName("b_05.01.csv");   // "B_05.01"
 minimal parameters of a register of information (`entityID`, `refPeriod` in `YYYY-MM-DD` format, `baseCurrency`);
 `with(...)` returns an enriched copy. Common names are constants (`ENTITY_ID`, `REF_PERIOD`, `BASE_CURRENCY`,
 `DECIMALS_MONETARY`, `DECIMALS_INTEGER`). Values are passed through unchanged: their exact format is governed by the
-EBA filing rules for the taxonomy version in use.
+EBA filing rules for the taxonomy version in use. A `null` value becomes an empty string; a `null` name is refused.
 
 ```java
 Parameters parameters = Parameters.registerOfInformation("rs:506700GE1G29325QX363.CON", LocalDate.of(2026, 12, 31), "EUR")
@@ -100,8 +100,8 @@ reportPackage.table("B_05.01");   // Optional<Table>
 
 ### Writing a package: `XbrlCsvWriter`
 
-`write(reportPackage)` returns the bytes of the `.zip`; `write(reportPackage, out)` writes to an `OutputStream`. The
-archive follows the xBRL Report Package 2023 and xBRL-CSV specifications:
+`write(reportPackage)` returns the bytes of the `.zip`; `write(reportPackage, out)` writes to an `OutputStream`, which
+it leaves open. The archive follows the xBRL Report Package 2023 and xBRL-CSV specifications:
 
 ```
 {name}/META-INF/reportPackage.json      documentType https://xbrl.org/report-package/2023
@@ -119,7 +119,9 @@ archive follows the xBRL Report Package 2023 and xBRL-CSV specifications:
   same hash on any machine and in any time zone, which lets you compare two runs or prove what was filed.
 
 The writer refuses, with an `IllegalArgumentException`, a package name that is not a single folder name (empty, `.`,
-`..`, or containing `/` or `\`) and two tables whose codes give the same file name (`B_01.01` and `b_01.01`). The other
+`..`, or containing `/` or `\`), a table code that does not give a plain file name (empty, `.`, `..`, containing `/` or
+`\`, or named like `parameters.csv` or `FilingIndicators.csv`) and two tables whose codes give the same file name
+(`B_01.01` and `b_01.01`). The other
 structural problems are reported by `StructuralValidator`, which should run before writing.
 
 ```java
@@ -134,11 +136,14 @@ try (OutputStream out = Files.newOutputStream(Path.of(reportPackage.name() + ".z
 ### Reading a package: `XbrlCsvReader`
 
 `read(byte[])` or `read(InputStream)` rebuilds a `ReportPackage`, for example from a client's filing of the previous
-year. A package written then read back gives the same name, entry point, parameters, filing indicators and tables.
+year. A package written then read back is equal to the original. `read(InputStream)` leaves the stream open.
 
 - The package is located by its `reports/report.json`; the entry point comes from `documentInfo.extends`.
+- `parameters.csv` must have the header `name,value` and `FilingIndicators.csv` the header `templateID,reported`
+  (case ignored), with exactly two values on every row.
 - Every other `.csv` in `reports/` becomes a `Table` whose code is derived from the file name; the first row is the
-  column header.
+  column header. Tables come in the order of the filing indicators, then the undeclared ones by file name.
+- The archive is held in memory while it is read: allow a few times its uncompressed size in heap.
 - Lenient on input: UTF-8 BOM and bare LF line endings accepted, blank lines ignored (a quoted empty value `""` on
   its own line is kept as a row).
 
@@ -153,6 +158,8 @@ Malicious or broken archives are rejected with an `IllegalArgumentException`:
 | Two entries with the same path | `Invalid package: duplicate entry ...` |
 | `reports/report.json` missing | `Invalid package: reports/report.json missing` |
 | More than one `reports/report.json` | `Invalid package: several reports/report.json ...` |
+| More than 10 million CSV values in all | `Invalid CSV: too many values ...` |
+| `parameters.csv` or `FilingIndicators.csv` with another header, or a row without exactly two values | `Invalid package: parameters.csv ...` |
 | `reported` other than `true` or `false` in `FilingIndicators.csv` | `Invalid package: reported must be true or false ...` |
 | `report.json` unreadable or without `documentInfo.extends` | `Invalid package: ...` |
 | Unclosed quote in a CSV | `Invalid CSV: unclosed quote` |
